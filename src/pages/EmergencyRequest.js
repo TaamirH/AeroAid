@@ -1,11 +1,12 @@
 // File: src/pages/EmergencyRequest.js
-// Updated Emergency Request component with manual location input
+// Updated Emergency Request component with address autocomplete
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { createEmergencyRequest } from '../services/emergencyService';
-import { getCurrentLocation, getAddressFromCoordinates, getCoordinatesFromAddress } from '../utils/geoUtils';
+import { getCurrentLocation, getAddressFromCoordinates } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
+import AddressAutocomplete from '../components/location/AddressAutocomplete';
 
 const emergencyTypes = [
   'Missing Person',
@@ -29,7 +30,6 @@ const EmergencyRequest = () => {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [showManualLocation, setShowManualLocation] = useState(false);
-  const [manualAddress, setManualAddress] = useState('');
 
   // Try to get location on component mount
   useEffect(() => {
@@ -66,30 +66,12 @@ const EmergencyRequest = () => {
     }
   };
 
-  const handleManualLocationSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!manualAddress.trim()) {
-      return toast.error('Please enter a valid address');
-    }
-    
-    try {
-      setLocationLoading(true);
-      const coordinates = await getCoordinatesFromAddress(manualAddress);
-      
-      setFormData(prev => ({
-        ...prev,
-        location: coordinates,
-        address: manualAddress
-      }));
-      
-      toast.success('Location updated successfully!');
-    } catch (error) {
-      console.error('Error getting coordinates:', error);
-      toast.error(error.message || 'Failed to find coordinates for this address. Please try a different address.');
-    } finally {
-      setLocationLoading(false);
-    }
+  const handleLocationSelect = (locationData) => {
+    setFormData(prev => ({
+      ...prev,
+      location: locationData.location,
+      address: locationData.address
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -158,87 +140,46 @@ const EmergencyRequest = () => {
             Location
           </p>
           
-          {!showManualLocation && (
-            <div className="flex flex-col space-y-3">
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={handleGetLocation}
-                  className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
-                  disabled={locationLoading}
-                >
-                  {locationLoading ? 'Getting...' : 'Get My Location'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowManualLocation(true)}
-                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                >
-                  Enter Manually
-                </button>
-              </div>
-              
-              {formData.location && (
-                <div className="bg-gray-100 p-3 rounded">
-                  <p className="font-semibold">Emergency Location:</p>
-                  <p>Lat: {formData.location.latitude.toFixed(6)}</p>
-                  <p>Lng: {formData.location.longitude.toFixed(6)}</p>
-                  {formData.address && (
-                    <p className="mt-1 text-sm text-gray-600">Address: {formData.address}</p>
-                  )}
-                </div>
+          <div className="flex items-center mb-4">
+            <button
+              type="button"
+              onClick={handleGetLocation}
+              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
+              disabled={locationLoading}
+            >
+              {locationLoading ? 'Getting...' : 'Get My Location'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowManualLocation(!showManualLocation)}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            >
+              {showManualLocation ? 'Hide Manual Input' : 'Enter Manually'}
+            </button>
+          </div>
+          
+          {!showManualLocation && formData.location && (
+            <div className="bg-gray-100 p-3 rounded mb-4">
+              <p className="font-semibold">Emergency Location:</p>
+              <p>Lat: {formData.location.latitude.toFixed(6)}</p>
+              <p>Lng: {formData.location.longitude.toFixed(6)}</p>
+              {formData.address && (
+                <p className="mt-1 text-sm text-gray-600">Address: {formData.address}</p>
               )}
             </div>
           )}
           
           {showManualLocation && (
-            <div className="bg-gray-50 p-4 rounded border border-gray-200 mt-2">
+            <div className="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
               <h3 className="font-medium mb-2">Enter Emergency Location</h3>
-              <div className="mb-3">
-                <label className="block text-gray-700 text-sm mb-1">
-                  Address or Location Description
-                </label>
-                <input
-                  type="text"
-                  value={manualAddress}
-                  onChange={(e) => setManualAddress(e.target.value)}
-                  placeholder="Enter full address or coordinates"
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Example: "123 Main St, New York, NY" or "32.7157, -117.1611"
-                </p>
-              </div>
-              
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  onClick={handleManualLocationSubmit}
-                  className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
-                  disabled={locationLoading}
-                >
-                  {locationLoading ? 'Processing...' : 'Set Location'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowManualLocation(false)}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                >
-                  Cancel
-                </button>
-              </div>
-              
-              {formData.location && (
-                <div className="mt-3 bg-gray-100 p-3 rounded">
-                  <p className="font-semibold">Emergency Coordinates:</p>
-                  <p>Lat: {formData.location.latitude.toFixed(6)}</p>
-                  <p>Lng: {formData.location.longitude.toFixed(6)}</p>
-                </div>
-              )}
+              <AddressAutocomplete 
+                onLocationSelect={handleLocationSelect}
+                initialValue={formData.address}
+              />
             </div>
           )}
           
-          <p className="text-xs text-red-500 mt-2">
+          <p className="text-xs text-red-500">
             * Your precise location is necessary to alert nearby drone operators
           </p>
         </div>

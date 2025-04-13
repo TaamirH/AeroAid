@@ -1,17 +1,17 @@
 // File: src/pages/Profile.js
-// Updated Profile component with manual location input
+// Updated Profile component with address autocomplete
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
-import { getCurrentLocation, getCoordinatesFromAddress } from '../utils/geoUtils';
+import { getCurrentLocation } from '../utils/geoUtils';
 import { requestNotificationPermission } from '../services/firebase';
+import AddressAutocomplete from '../components/location/AddressAutocomplete';
 
 const Profile = () => {
   const { currentUser, userProfile, updateUserProfile, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [showManualLocation, setShowManualLocation] = useState(false);
-  const [manualAddress, setManualAddress] = useState('');
   const [formData, setFormData] = useState({
     displayName: '',
     isDroneOperator: false,
@@ -45,6 +45,7 @@ const Profile = () => {
         location
       }));
       toast.success('Location updated successfully!');
+      setShowManualLocation(false);
     } catch (error) {
       console.error('Error getting location:', error);
       toast.error(error.message || 'Failed to get location. Try entering location manually.');
@@ -54,30 +55,11 @@ const Profile = () => {
     }
   };
 
-  const handleManualLocationSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!manualAddress.trim()) {
-      return toast.error('Please enter a valid address');
-    }
-    
-    try {
-      setLocationLoading(true);
-      const coordinates = await getCoordinatesFromAddress(manualAddress);
-      
-      setFormData(prev => ({
-        ...prev,
-        location: coordinates
-      }));
-      
-      toast.success('Location updated successfully!');
-      setShowManualLocation(false);
-    } catch (error) {
-      console.error('Error getting coordinates:', error);
-      toast.error(error.message || 'Failed to find coordinates for this address. Please try a different address.');
-    } finally {
-      setLocationLoading(false);
-    }
+  const handleLocationSelect = (locationData) => {
+    setFormData(prev => ({
+      ...prev,
+      location: locationData.location
+    }));
   };
 
   const handleSave = async (e) => {
@@ -185,84 +167,42 @@ const Profile = () => {
               Location
             </p>
             
+            <div className="flex items-center mb-4">
+              <button
+                type="button"
+                onClick={handleGetLocation}
+                className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
+                disabled={locationLoading}
+              >
+                {locationLoading ? 'Getting...' : 'Update My Location'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowManualLocation(!showManualLocation)}
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                {showManualLocation ? 'Hide Manual Input' : 'Enter Manually'}
+              </button>
+            </div>
+            
             {!showManualLocation && (
-              <div className="flex flex-col space-y-3">
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={handleGetLocation}
-                    className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
-                    disabled={locationLoading}
-                  >
-                    {locationLoading ? 'Getting...' : 'Update My Location'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowManualLocation(true)}
-                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                  >
-                    Enter Manually
-                  </button>
-                </div>
-                
-                <div>
-                  {formData.location ? (
-                    <div className="bg-gray-100 p-3 rounded">
-                      <p className="font-semibold">Current Location:</p>
-                      <p>Lat: {formData.location.latitude.toFixed(6)}</p>
-                      <p>Lng: {formData.location.longitude.toFixed(6)}</p>
-                    </div>
-                  ) : (
-                    <p className="text-yellow-600">No location detected</p>
-                  )}
-                </div>
+              <div>
+                {formData.location ? (
+                  <div className="bg-gray-100 p-3 rounded mb-4">
+                    <p className="font-semibold">Current Location:</p>
+                    <p>Lat: {formData.location.latitude.toFixed(6)}</p>
+                    <p>Lng: {formData.location.longitude.toFixed(6)}</p>
+                  </div>
+                ) : (
+                  <p className="text-yellow-600 mb-4">No location detected</p>
+                )}
               </div>
             )}
             
             {showManualLocation && (
-              <div className="bg-gray-50 p-4 rounded border border-gray-200 mt-2">
+              <div className="bg-gray-50 p-4 rounded border border-gray-200 mb-4">
                 <h3 className="font-medium mb-2">Enter Location Manually</h3>
-                <div className="mb-3">
-                  <label className="block text-gray-700 text-sm mb-1">
-                    Address or Location Description
-                  </label>
-                  <input
-                    type="text"
-                    value={manualAddress}
-                    onChange={(e) => setManualAddress(e.target.value)}
-                    placeholder="Enter full address, city, or coordinates"
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Example: "123 Main St, New York, NY" or "32.7157, -117.1611"
-                  </p>
-                </div>
-                
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={handleManualLocationSubmit}
-                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
-                    disabled={locationLoading}
-                  >
-                    {locationLoading ? 'Processing...' : 'Set Location'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowManualLocation(false)}
-                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                
-                {formData.location && (
-                  <div className="mt-3 bg-gray-100 p-3 rounded">
-                    <p className="font-semibold">Current Coordinates:</p>
-                    <p>Lat: {formData.location.latitude.toFixed(6)}</p>
-                    <p>Lng: {formData.location.longitude.toFixed(6)}</p>
-                  </div>
-                )}
+                <AddressAutocomplete onLocationSelect={handleLocationSelect} />
               </div>
             )}
           </div>

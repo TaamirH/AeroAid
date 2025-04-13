@@ -71,19 +71,48 @@ export function AuthProvider({ children }) {
 
   async function fetchUserProfile(userId) {
     try {
+      console.log('Fetching user profile for ID:', userId);
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
         const userData = userSnap.data();
+        console.log('User profile data retrieved:', userData);
         setUserProfile(userData);
         return userData;
       } else {
-        return null;
+        console.log('No user profile found, creating a default one');
+        // Create a default profile if none exists
+        const defaultProfile = {
+          displayName: currentUser?.displayName || '',
+          email: currentUser?.email || '',
+          isDroneOperator: false,
+          location: null,
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString()
+        };
+        
+        // Save the default profile to Firestore
+        await setDoc(userRef, defaultProfile);
+        
+        // Set the profile in the state
+        setUserProfile(defaultProfile);
+        return defaultProfile;
       }
     } catch (error) {
       console.error("Error fetching user profile:", error);
-      return null;
+      // Set a default profile even on error to prevent endless loading
+      const fallbackProfile = {
+        displayName: currentUser?.displayName || '',
+        email: currentUser?.email || '',
+        isDroneOperator: false,
+        location: null,
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+        error: true
+      };
+      setUserProfile(fallbackProfile);
+      return fallbackProfile;
     }
   }
 

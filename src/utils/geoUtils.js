@@ -64,6 +64,17 @@ export const getAddressFromCoordinates = async (latitude, longitude) => {
 
 // Calculate distance between two points using the Haversine formula
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  // Convert all values to numbers to ensure proper calculation
+  lat1 = Number(lat1);
+  lon1 = Number(lon1);
+  lat2 = Number(lat2);
+  lon2 = Number(lon2);
+  
+  // Handle same or very close coordinates (prevent calculation errors)
+  if (Math.abs(lat1 - lat2) < 0.00001 && Math.abs(lon1 - lon2) < 0.00001) {
+    return 0.01; // Return a small distance instead of zero to ensure visibility
+  }
+  
   const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
@@ -73,7 +84,9 @@ export const calculateDistance = (lat1, lon1, lat2, lon2) => {
     Math.sin(dLon/2) * Math.sin(dLon/2); 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
   const d = R * c; // Distance in km
-  return d;
+  
+  // Ensure we always return a positive number
+  return Math.max(0.01, d);
 };
 
 const deg2rad = (deg) => {
