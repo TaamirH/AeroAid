@@ -21,12 +21,18 @@ const Profile = () => {
   useEffect(() => {
     if (userProfile) {
       setFormData({
-        displayName: userProfile.displayName || '',
+        displayName: userProfile.displayName || currentUser?.displayName || '',
         isDroneOperator: userProfile.isDroneOperator || false,
         location: userProfile.location || null
       });
+    } else if (currentUser) {
+      // Fallback to use current user's displayName if userProfile isn't loaded yet
+      setFormData(prev => ({
+        ...prev,
+        displayName: currentUser.displayName || ''
+      }));
     }
-  }, [userProfile]);
+  }, [userProfile, currentUser]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

@@ -11,6 +11,8 @@ import { db } from '../services/firebase';
 import { createTestNotification } from '../services/notificationService';
 import { forceNotifyAllOperators, createTestEmergencyForNotifications } from '../services/emergencyService';
 import { toast } from 'react-toastify';
+import EmergencyStats from '../components/dashboards/EmergencyStats';
+
 
 const Dashboard = () => {
   const { currentUser, userProfile } = useAuth();
@@ -119,7 +121,14 @@ const Dashboard = () => {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          {currentUser && (
+            <p className="text-gray-600 mt-1">
+              Hey, {userProfile?.displayName || currentUser.displayName || 'there'}! Welcome to AeroAid.
+            </p>
+          )}
+        </div>
         
         <div className="space-x-2">
           <Link
@@ -141,6 +150,12 @@ const Dashboard = () => {
       {/* Updated grid layout with better column sizing */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
+          {!loading && currentUser && (
+            <div className="mb-6">
+              <EmergencyStats userId={currentUser.uid} />
+            </div>
+          )}
+          
           {userProfile?.isDroneOperator && (
             <div className="bg-blue-50 p-4 rounded-lg mb-6">
               <h2 className="text-lg font-semibold mb-2">Drone Operator Status</h2>
