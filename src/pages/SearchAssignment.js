@@ -1,3 +1,6 @@
+// File: src/pages/SearchAssignment.js
+// Complete Search Assignment component with improved location handling
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +12,7 @@ import MapView from '../components/map/MapView';
 
 const SearchAssignment = () => {
   const { id } = useParams();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   
   const [assignment, setAssignment] = useState(null);
@@ -22,12 +25,23 @@ const SearchAssignment = () => {
   const [submittingFinding, setSubmittingFinding] = useState(false);
   const [completingAssignment, setCompletingAssignment] = useState(false);
   
+  // Location handling states
+  const [locationError, setLocationError] = useState(null);
+  const [manualLocationUpdating, setManualLocationUpdating] = useState(false);
+  const [showManualLocation, setShowManualLocation] = useState(false);
+  const [manualCoordinates, setManualCoordinates] = useState({
+    latitude: '',
+    longitude: ''
+  });
+  
   // Reference for location tracking interval
   const locationTrackingRef = useRef(null);
   
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
+        
         // Get assignment details
         const assignmentData = await getSearchAssignmentById(id);
         setAssignment(assignmentData);
@@ -36,6 +50,14 @@ const SearchAssignment = () => {
           // Get related emergency details
           const emergencyData = await getEmergencyById(assignmentData.emergencyId);
           setEmergency(emergencyData);
+          
+          // Set initial coordinates for manual input based on current drone location
+          if (assignmentData.droneLocation) {
+            setManualCoordinates({
+              latitude: assignmentData.droneLocation.latitude.toString(),
+              longitude: assignmentData.droneLocation.longitude.toString()
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching assignment data:', error);
@@ -63,16 +85,101 @@ const SearchAssignment = () => {
     };
   }, [id]);
   
-  // Start tracking the drone operator's location
+  // Enhanced location update function
+  const updateLocation = async (manualLocation = null) => {
+    try {
+      setLocationError(null);
+      let location;
+      
+      if (manualLocation) {
+        location = manualLocation;
+      } else {
+        try {
+          // Add a console log before getCurrentLocation to track execution
+          console.log('Attempting to get current location...');
+          location = await getCurrentLocation();
+          console.log('Successfully got location:', location);
+        } catch (geoError) {
+          console.error('Browser geolocation failed:', geoError);
+          
+          // Use existing drone location as fallback without showing error
+          console.log('Using existing drone location');
+          location = {
+            latitude: assignment.droneLocation.latitude,
+            longitude: assignment.droneLocation.longitude
+          };
+          
+          // Don't throw, just use the fallback silently
+          toast.info('Using existing location as fallback');
+        }
+      }
+      
+      // Update drone location in database
+      console.log('Updating drone location to:', location);
+      await updateDroneLocation(id, location);
+      toast.success('Drone location updated');
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating location:', error);
+      setLocationError(error.message);
+      return false;
+    }
+  };
+  
+  // Manual coordinates handler
+  const handleManualCoordinateChange = (e) => {
+    const { name, value } = e.target;
+    setManualCoordinates(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+  
+  // Submit manual coordinates
+  const handleManualLocationSubmit = async (e) => {
+    e.preventDefault();
+    setManualLocationUpdating(true);
+    
+    try {
+      // Validate coordinates
+      const lat = parseFloat(manualCoordinates.latitude);
+      const lng = parseFloat(manualCoordinates.longitude);
+      
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new Error('Invalid coordinates. Latitude must be between -90 and 90, and longitude between -180 and 180.');
+      }
+      
+      const location = {
+        latitude: lat,
+        longitude: lng
+      };
+      
+      const success = await updateLocation(location);
+      if (success) {
+        toast.success('Location updated successfully');
+        setShowManualLocation(false);
+      }
+    } catch (error) {
+      console.error('Error with manual coordinates:', error);
+      toast.error(error.message);
+    } finally {
+      setManualLocationUpdating(false);
+    }
+  };
+  
+  // Improved location tracking
   const startLocationTracking = () => {
     if (locationTrackingRef.current) return;
     
+    console.log('Starting location tracking');
+    
     locationTrackingRef.current = setInterval(async () => {
       try {
-        const location = await getCurrentLocation();
-        await updateDroneLocation(id, location);
+        await updateLocation();
       } catch (error) {
-        console.error('Error updating location:', error);
+        // Error is already handled in updateLocation
+        console.log('Location tracking cycle skipped due to error');
       }
     }, 10000); // Update every 10 seconds
   };
@@ -104,21 +211,41 @@ const SearchAssignment = () => {
     } catch (error) {
       console.error('Error getting location:', error);
       toast.error('Failed to get location: ' + error.message);
+      
+      // Offer to use drone's current location instead
+      if (assignment?.droneLocation) {
+        if (window.confirm('Unable to get current location. Use drone\'s current position instead?')) {
+          setFindingForm(prev => ({
+            ...prev,
+            location: {
+              latitude: assignment.droneLocation.latitude,
+              longitude: assignment.droneLocation.longitude
+            }
+          }));
+        }
+      }
     }
   };
   
   const handleSubmitFinding = async (e) => {
     e.preventDefault();
     
-    if (!findingForm.location) {
-      return toast.error('Location is required for findings!');
-    }
-    
     try {
       setSubmittingFinding(true);
+      
+      // If no location is set, use the current drone location
+      let findingLocation = findingForm.location;
+      if (!findingLocation) {
+        console.log('No finding location set, using drone location');
+        findingLocation = {
+          latitude: assignment.droneLocation.latitude,
+          longitude: assignment.droneLocation.longitude
+        };
+      }
+      
       await addFindingToEmergency(emergency.id, {
         description: findingForm.description,
-        location: findingForm.location,
+        location: findingLocation,
         operatorId: currentUser.uid
       });
       
@@ -134,7 +261,23 @@ const SearchAssignment = () => {
       setSubmittingFinding(false);
     }
   };
-  
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'Unknown time';
+    
+    // Handle string ISO timestamps (new format)
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp).toLocaleString();
+    }
+    
+    // Handle Firestore Timestamps (old format)
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate().toLocaleString();
+    }
+    
+    // Fallback
+    return 'Unknown time';
+  };
+
   const handleCompleteAssignment = async () => {
     if (window.confirm('Are you sure you want to complete this assignment?')) {
       try {
@@ -234,6 +377,109 @@ const SearchAssignment = () => {
                 )}
               </div>
               
+              {/* Location Update Controls */}
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-2">Drone Location</h3>
+                <p>
+                  <strong>Current Position:</strong> Lat: {assignment.droneLocation.latitude.toFixed(6)}, 
+                  Lng: {assignment.droneLocation.longitude.toFixed(6)}
+                </p>
+                
+                <button
+                  type="button"
+                  onClick={() => updateLocation()}
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
+                  disabled={manualLocationUpdating}
+                >
+                  Update Drone Location
+                </button>
+              </div>
+              
+              {locationError && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-yellow-800">Location Error</h3>
+                      <div className="mt-1 text-sm text-yellow-700">
+                        <p>{locationError}</p>
+                      </div>
+                      <div className="mt-2 flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => updateLocation()}
+                          className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 px-2 py-1 rounded text-xs font-medium"
+                        >
+                          Try Again
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowManualLocation(true)}
+                          className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 px-2 py-1 rounded text-xs font-medium"
+                        >
+                          Enter Manually
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {showManualLocation && (
+                <div className="bg-white border border-gray-200 rounded-md p-4 mb-4">
+                  <h3 className="text-sm font-medium mb-2">Enter Location Coordinates</h3>
+                  <form onSubmit={handleManualLocationSubmit} className="space-y-2">
+                    <div>
+                      <label className="block text-xs text-gray-500">Latitude</label>
+                      <input
+                        type="text"
+                        name="latitude"
+                        value={manualCoordinates.latitude}
+                        onChange={handleManualCoordinateChange}
+                        placeholder="e.g. 31.9507"
+                        className="border rounded px-2 py-1 w-full text-sm"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500">Longitude</label>
+                      <input
+                        type="text"
+                        name="longitude"
+                        value={manualCoordinates.longitude}
+                        onChange={handleManualCoordinateChange}
+                        placeholder="e.g. 34.8093"
+                        className="border rounded px-2 py-1 w-full text-sm"
+                        required
+                      />
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        type="submit"
+                        className="bg-blue-500 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                        disabled={manualLocationUpdating}
+                      >
+                        {manualLocationUpdating ? 'Updating...' : 'Update'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowManualLocation(false)}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Tip: You can get coordinates from Google Maps by right-clicking on a location and selecting "What's here?"
+                    </p>
+                  </form>
+                </div>
+              )}
+              
               {assignment.status === 'active' && emergency?.status !== 'resolved' && (
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold mb-2">Report a Finding</h3>
@@ -277,7 +523,7 @@ const SearchAssignment = () => {
                     <button
                       type="submit"
                       className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                      disabled={submittingFinding || !findingForm.location}
+                      disabled={submittingFinding}
                     >
                       {submittingFinding ? 'Submitting...' : 'Report Finding'}
                     </button>
@@ -337,7 +583,7 @@ const SearchAssignment = () => {
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
                         <p className="text-sm text-gray-600">
-                          Reported at {finding.timestamp?.toDate().toLocaleString()}
+                          Reported at {formatTimestamp(finding.timestamp)}
                         </p>
                       </li>
                     ))}

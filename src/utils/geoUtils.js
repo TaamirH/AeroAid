@@ -2,52 +2,87 @@
 // Update this file with improved geolocation handling
 
 // Get current user location with better error handling
-export const getCurrentLocation = () => {
+export const getCurrentLocation = (options = {}) => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by your browser'));
+      reject(new Error('Your browser does not support geolocation.'));
     } else {
-      // Add timeout to handle cases where browsers silently fail
-      const timeoutId = setTimeout(() => {
-        reject(new Error('Location request timed out. Please try again or enter location manually.'));
-      }, 10000); // 10 second timeout
+      // Check if permission is already denied
+      if (navigator.permissions) {
+        navigator.permissions.query({ name: 'geolocation' }).then(result => {
+          if (result.state === 'denied') {
+            reject(new Error('Location access is blocked. Please allow location access in your browser settings.'));
+            return;
+          }
+        });
+      }
+
+      // Set default options with reasonable values
+      const defaultOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,         // 10 seconds
+        maximumAge: 300000     // 5 minutes
+      };
+      
+      const geolocationOptions = { ...defaultOptions, ...options };
       
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          clearTimeout(timeoutId);
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude
           });
         },
         (error) => {
-          clearTimeout(timeoutId);
-          let errorMessage = 'Unknown error occurred while getting location.';
+          let errorMessage = 'Unknown location error occurred.';
           
           switch(error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = 'Location permission denied. Please check your browser settings or enter location manually.';
+              errorMessage = 'Location permission denied. Please enable location access in your browser settings.';
               break;
             case error.POSITION_UNAVAILABLE:
               errorMessage = 'Location information is unavailable. Please try again or enter location manually.';
               break;
             case error.TIMEOUT:
-              errorMessage = 'Location request timed out. Please try again or enter location manually.';
+              errorMessage = 'Location request timed out. Please check your connection and try again.';
               break;
           }
           
+          console.error('Geolocation error:', error.code, error.message);
           reject(new Error(errorMessage));
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 8000,
-          maximumAge: 0
-        }
+        geolocationOptions
       );
     }
   });
 };
-
+export const getLocationWithFallback = async () => {
+  try {
+    // First try browser geolocation
+    return await getCurrentLocation();
+  } catch (error) {
+    console.error('Primary location method failed:', error);
+    
+    // Try IP-based geolocation as fallback
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      
+      if (data.latitude && data.longitude) {
+        return {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          source: 'ip',
+          accuracy: 'low'
+        };
+      }
+      throw new Error('No location data in IP response');
+    } catch (fallbackError) {
+      console.error('Fallback location method failed:', fallbackError);
+      throw error; // Throw the original error
+    }
+  }
+};
 // Get address from coordinates using reverse geocoding
 export const getAddressFromCoordinates = async (latitude, longitude) => {
   try {

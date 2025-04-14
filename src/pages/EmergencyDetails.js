@@ -64,7 +64,29 @@ const EmergencyDetails = () => {
   const handleAcceptEmergency = async () => {
     try {
       setAccepting(true);
-      const location = await getCurrentLocation();
+      
+      // Get user's current location with better error handling
+      let location;
+      try {
+        location = await getCurrentLocation();
+      } catch (locationError) {
+        console.error('Error getting location:', locationError);
+        
+        // Fall back to using user's profile location if available
+        if (userProfile?.location) {
+          console.log('Falling back to profile location:', userProfile.location);
+          location = userProfile.location;
+        } else {
+          // If no profile location, show error and abort
+          toast.error(`Location error: ${locationError.message}. Please update your location in your profile.`);
+          setAccepting(false);
+          return;
+        }
+      }
+      
+      // Now proceed with accepting the emergency using the location we have
+      console.log('Accepting emergency with location:', location);
+      
       const assignmentId = await acceptEmergency(id, currentUser.uid, location);
       toast.success('Emergency accepted! You have been assigned a search area.');
       navigate(`/search/${assignmentId}`);
@@ -92,6 +114,24 @@ const EmergencyDetails = () => {
     return new Date(date).toLocaleString();
   };
   
+  // Helper function to format timestamps that could be in different formats
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'Unknown time';
+    
+    // Handle string ISO timestamps (new format)
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp).toLocaleString();
+    }
+    
+    // Handle Firestore Timestamps (old format)
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate().toLocaleString();
+    }
+    
+    // Fallback
+    return 'Unknown time';
+  };
+  
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -117,6 +157,21 @@ const EmergencyDetails = () => {
                    !userAssignment && 
                    emergency.status !== 'resolved' && 
                    (userDistance === null || userDistance <= 3);
+
+  // Check if the user can view the emergency (any logged-in user)
+  const canView = !!currentUser; // Ensure the user is logged in
+
+  if (!canView) {
+    return (
+      <div className="text-center py-8">
+        <h2 className="text-xl font-bold mb-4">Unauthorized</h2>
+        <p>You must be logged in to view this emergency.</p>
+        <Link to="/login" className="text-blue-500 hover:underline mt-4 inline-block">
+          Go to Login
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -201,7 +256,7 @@ const EmergencyDetails = () => {
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
                         <p className="text-sm text-gray-600">
-                          Reported by operator at {finding.timestamp?.toDate().toLocaleString()}
+                          Reported by operator at {formatTimestamp(finding.timestamp)}
                         </p>
                         <p className="text-sm text-gray-600">
                           Location: Lat {finding.location.latitude.toFixed(6)}, 

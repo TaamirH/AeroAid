@@ -222,17 +222,18 @@ export const addFindingToEmergency = async (emergencyId, finding) => {
       const emergencyData = docSnap.data();
       const findings = emergencyData.findings || [];
       
+      // Create a new finding with regular JavaScript Date object instead of serverTimestamp
       const newFinding = {
         id: Date.now().toString(),
         ...finding,
-        timestamp: serverTimestamp()
+        timestamp: new Date().toISOString() // Use ISO string instead of serverTimestamp
       };
       
       findings.push(newFinding);
       
       await updateDoc(docRef, {
         findings,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp() // serverTimestamp is fine here, just not inside the array
       });
       
       return newFinding.id;

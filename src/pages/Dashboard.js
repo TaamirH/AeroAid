@@ -1,5 +1,4 @@
 // File: src/pages/Dashboard.js
-// Updated Dashboard component with active emergency assignments and notifications
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -75,18 +74,16 @@ const Dashboard = () => {
       const allEmergencies = [];
       
       querySnapshot.forEach(doc => {
-        // CHANGE: Include ALL emergencies for testing (even those created by this user)
-        // Remove this filter: if (doc.data().userId !== currentUser.uid) {
+        // Include ALL emergencies for testing
         allEmergencies.push({
           id: doc.id,
           ...doc.data(),
           createdAt: doc.data().createdAt?.toDate(),
           updatedAt: doc.data().updatedAt?.toDate()
         });
-        // }
       });
       
-      // Calculate distance and filter emergencies within 3km
+      // Calculate distance and filter emergencies within 5km
       const nearby = allEmergencies.filter(emergency => {
         if (!emergency.location) return false;
         
@@ -100,15 +97,13 @@ const Dashboard = () => {
         // Add distance to the emergency object
         emergency.distance = distance;
         
-        // CHANGE: Increased range to ensure visibility during testing
-        // Return true if within 5km instead of 3km
+        // Return true if within 5km
         return distance <= 5;
       });
       
       // Sort by distance
       nearby.sort((a, b) => a.distance - b.distance);
       
-      // DEBUG: Log found emergencies
       console.log(`Found ${nearby.length} nearby emergencies`, nearby);
       
       setNearbyEmergencies(nearby);
@@ -143,8 +138,9 @@ const Dashboard = () => {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="md:col-span-2">
+      {/* Updated grid layout with better column sizing */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3">
           {userProfile?.isDroneOperator && (
             <div className="bg-blue-50 p-4 rounded-lg mb-6">
               <h2 className="text-lg font-semibold mb-2">Drone Operator Status</h2>
@@ -233,19 +229,19 @@ const Dashboard = () => {
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">
                               Date
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">
                               Type
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
                               Location
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">
                               Status
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">
                               Actions
                             </th>
                           </tr>
@@ -253,17 +249,17 @@ const Dashboard = () => {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {emergencies.map((emergency) => (
                             <tr key={emergency.id}>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4">
                                 {formatDate(emergency.createdAt)}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4">
                                 {emergency.type}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4">
                                 {emergency.address?.substring(0, 30) || 'N/A'}...
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                                   ${emergency.status === 'active' ? 'bg-yellow-100 text-yellow-800' : 
                                     emergency.status === 'in-progress' ? 'bg-blue-100 text-blue-800' : 
                                     'bg-green-100 text-green-800'}`}
@@ -271,7 +267,7 @@ const Dashboard = () => {
                                   {emergency.status}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <td className="px-6 py-4 text-sm font-medium">
                                 <Link
                                   to={`/emergency/${emergency.id}`}
                                   className="text-blue-600 hover:text-blue-900"
@@ -329,21 +325,21 @@ const Dashboard = () => {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {assignments.map((assignment) => (
                             <tr key={assignment.id}>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4">
                                 {formatDate(assignment.createdAt)}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4">
                                 {assignment.emergencyId.substring(0, 8)}...
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                                   ${assignment.status === 'active' ? 'bg-blue-100 text-blue-800' : 
                                     'bg-green-100 text-green-800'}`}
                                 >
                                   {assignment.status}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <td className="px-6 py-4 text-sm font-medium">
                                 <Link
                                   to={`/search/${assignment.id}`}
                                   className="text-blue-600 hover:text-blue-900 mr-4"
@@ -417,154 +413,162 @@ const Dashboard = () => {
           )}
         </div>
         
-        <div className="md:col-span-1">
-  <div className="bg-white rounded-lg shadow overflow-hidden mb-4">
-    <div className="bg-blue-500 text-white p-3">
-      <h2 className="font-bold text-lg">Notifications</h2>
-    </div>
-    {userProfile && currentUser && (
-      <NotificationsList userId={currentUser.uid} />
-    )}
-  </div>
-</div>
-        {/* Enhanced Debug Section - Remove in production */}
-<div className="bg-gray-100 p-4 rounded-lg mt-6 border border-gray-300">
-  <h3 className="font-bold text-lg mb-2">Debug Tools</h3>
-  <p className="text-sm text-gray-600 mb-3">
-    Use these tools to test the application functionality. These will be removed in production.
-  </p>
-  
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div>
-      <h4 className="font-semibold mb-2">Notifications</h4>
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={async () => {
-            try {
-              // Create a test notification
-              await createTestNotification(currentUser.uid, 
-                nearbyEmergencies.length > 0 ? nearbyEmergencies[0].id : 'testEmergencyId');
-              toast.success('Test notification created successfully!');
-            } catch (error) {
-              console.error('Error creating test notification:', error);
-              toast.error('Failed to create test notification');
-            }
-          }}
-          className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Create Test Notification (Self)
-        </button>
-        
-        <button
-  onClick={async () => {
-    try {
-      // Look for emergencies in both the regular list and nearby emergencies
-      const allEmergencies = [...emergencies, ...nearbyEmergencies];
-      
-      if (allEmergencies.length === 0) {
-        return toast.error('No emergencies found. Create one first.');
-      }
-      
-      // Force notify all operators about the first emergency
-      const result = await forceNotifyAllOperators(allEmergencies[0].id, currentUser.uid);
-      if (result.success) {
-        toast.success(`Notified ${result.notifiedOperators} operators about emergency ${allEmergencies[0].id.substring(0, 8)}`);
-        console.log("Notification success, check console for details");
-      } else {
-        toast.error('Failed to send notifications: ' + result.error);
-      }
-    } catch (error) {
-      console.error('Error forcing notifications:', error);
-      toast.error('Failed to force notifications');
-    }
-  }}
-  className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded"
->
-  Force Notify All Operators
-</button>
-        
-        <button
-          onClick={async () => {
-            try {
-              // Create a test emergency and notify operators
-              if (!userProfile?.location) {
-                return toast.error('Location not set. Update your location first.');
-              }
-              
-              const result = await createTestEmergencyForNotifications(
-                currentUser.uid, 
-                userProfile.location,
-                true
-              );
-              
-              if (result.success) {
-                toast.success(`Created test emergency and notified ${result.notifiedOperators} operators`);
-              } else {
-                toast.error('Failed to create test emergency: ' + result.error);
-              }
-            } catch (error) {
-              console.error('Error creating test emergency:', error);
-              toast.error('Failed to create test emergency');
-            }
-          }}
-          className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Create Test Emergency + Notify
-        </button>
+        {/* Notifications panel - moved to 1/4 width column */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-lg shadow overflow-hidden sticky top-4">
+            <div className="bg-blue-500 text-white px-4 py-3 flex justify-between items-center">
+              <h2 className="font-bold text-lg">Notifications</h2>
+              <button 
+                onClick={() => window.location.reload()}
+                className="text-sm text-white hover:text-blue-100"
+              >
+                Refresh
+              </button>
+            </div>
+            {userProfile && currentUser && (
+              <NotificationsList userId={currentUser.uid} />
+            )}
+          </div>
+        </div>
       </div>
-    </div>
-    
-    <div>
-      <h4 className="font-semibold mb-2">Data & Debugging</h4>
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={() => {
-            fetchNearbyEmergencies();
-            toast.info('Refreshed nearby emergencies list');
-          }}
-          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Refresh Nearby Emergencies
-        </button>
+      
+      {/* Debug tools section */}
+      <div className="bg-gray-100 p-4 rounded-lg mt-6 border border-gray-300">
+        <h3 className="font-bold text-lg mb-2">Debug Tools</h3>
+        <p className="text-sm text-gray-600 mb-3">
+          Use these tools to test the application functionality. These will be removed in production.
+        </p>
         
-        <button
-          onClick={() => {
-            console.log('Current user:', currentUser);
-            console.log('User profile:', userProfile);
-            console.log('Current user location:', userProfile?.location);
-            console.log('Nearby emergencies:', nearbyEmergencies);
-            console.log('User emergencies:', emergencies);
-            console.log('User assignments:', assignments);
-            toast.info('Debug info logged to console');
-          }}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Log All Debug Info
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h4 className="font-semibold mb-2">Notifications</h4>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    // Create a test notification
+                    await createTestNotification(currentUser.uid, 
+                      nearbyEmergencies.length > 0 ? nearbyEmergencies[0].id : 'testEmergencyId');
+                    toast.success('Test notification created successfully!');
+                  } catch (error) {
+                    console.error('Error creating test notification:', error);
+                    toast.error('Failed to create test notification');
+                  }
+                }}
+                className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Create Test Notification (Self)
+              </button>
+              
+              <button
+                onClick={async () => {
+                  try {
+                    // Look for emergencies in both the regular list and nearby emergencies
+                    const allEmergencies = [...emergencies, ...nearbyEmergencies];
+                    
+                    if (allEmergencies.length === 0) {
+                      return toast.error('No emergencies found. Create one first.');
+                    }
+                    
+                    // Force notify all operators about the first emergency
+                    const result = await forceNotifyAllOperators(allEmergencies[0].id, currentUser.uid);
+                    if (result.success) {
+                      toast.success(`Notified ${result.notifiedOperators} operators about emergency ${allEmergencies[0].id.substring(0, 8)}`);
+                      console.log("Notification success, check console for details");
+                    } else {
+                      toast.error('Failed to send notifications: ' + result.error);
+                    }
+                  } catch (error) {
+                    console.error('Error forcing notifications:', error);
+                    toast.error('Failed to force notifications');
+                  }
+                }}
+                className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Force Notify All Operators
+              </button>
+              
+              <button
+                onClick={async () => {
+                  try {
+                    // Create a test emergency and notify operators
+                    if (!userProfile?.location) {
+                      return toast.error('Location not set. Update your location first.');
+                    }
+                    
+                    const result = await createTestEmergencyForNotifications(
+                      currentUser.uid, 
+                      userProfile.location,
+                      true
+                    );
+                    
+                    if (result.success) {
+                      toast.success(`Created test emergency and notified ${result.notifiedOperators} operators`);
+                    } else {
+                      toast.error('Failed to create test emergency: ' + result.error);
+                    }
+                  } catch (error) {
+                    console.error('Error creating test emergency:', error);
+                    toast.error('Failed to create test emergency');
+                  }
+                }}
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Create Test Emergency + Notify
+              </button>
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="font-semibold mb-2">Data & Debugging</h4>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  fetchNearbyEmergencies();
+                  toast.info('Refreshed nearby emergencies list');
+                }}
+                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Refresh Nearby Emergencies
+              </button>
+              
+              <button
+                onClick={() => {
+                  console.log('Current user:', currentUser);
+                  console.log('User profile:', userProfile);
+                  console.log('Current user location:', userProfile?.location);
+                  console.log('Nearby emergencies:', nearbyEmergencies);
+                  console.log('User emergencies:', emergencies);
+                  console.log('User assignments:', assignments);
+                  toast.info('Debug info logged to console');
+                }}
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Log All Debug Info
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Force refresh the page
+                  window.location.reload();
+                }}
+                className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        </div>
         
-        <button
-          onClick={() => {
-            // Force refresh the page
-            window.location.reload();
-          }}
-          className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Refresh Page
-        </button>
-      </div>
-    </div>
-  </div>
-  
-  <div className="mt-4 text-xs text-gray-500">
-    <p>Testing Instructions:</p>
-    <ol className="list-decimal pl-5 space-y-1">
-      <li>Create a test emergency with "Create Test Emergency + Notify"</li>
-      <li>Switch to another browser/incognito window with a different drone operator account</li>
-      <li>Check if notifications appear in that account</li>
-      <li>If no notifications appear, use "Force Notify All Operators" in the original account</li>
-    </ol>
-  </div>
-</div>
+        <div className="mt-4 text-xs text-gray-500">
+          <p>Testing Instructions:</p>
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>Create a test emergency with "Create Test Emergency + Notify"</li>
+            <li>Switch to another browser/incognito window with a different drone operator account</li>
+            <li>Check if notifications appear in that account</li>
+            <li>If no notifications appear, use "Force Notify All Operators" in the original account</li>
+          </ol>
+        </div>
       </div>
     </div>
   );
