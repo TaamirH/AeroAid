@@ -112,20 +112,35 @@ const updateLocation = async (manualLocation = null) => {
       } catch (geoError) {
         console.error('Browser geolocation failed:', geoError);
         
-        // Make sure assignment and droneLocation exist before using them
+        // First try to use existing drone location as fallback
         if (assignment && assignment.droneLocation) {
-          console.log('Using existing drone location');
+          console.log('Using current drone location as fallback');
           location = {
             latitude: assignment.droneLocation.latitude,
             longitude: assignment.droneLocation.longitude
           };
+        } 
+        // Then try to use user's profile location as fallback
+        else if (userProfile && userProfile.location) {
+          console.log('Using user profile location as fallback');
+          location = {
+            latitude: userProfile.location.latitude,
+            longitude: userProfile.location.longitude
+          };
+          
+          if (!locationTrackingRef.current) {
+            toast.info('Using profile location as fallback');
+          }
         } else {
-          throw new Error('Could not get location and no fallback available');
+          // No fallbacks available
+          setLocationError('Location access denied and no fallback location available.');
+          return false;
         }
       }
     }
     
-    // Only check for significant changes if we have existing droneLocation
+    // Rest of your function remains the same...
+    // Skip update if location hasn't changed significantly
     if (assignment && assignment.droneLocation && !manualLocation) {
       const currentLat = assignment.droneLocation.latitude;
       const currentLng = assignment.droneLocation.longitude;
@@ -133,7 +148,7 @@ const updateLocation = async (manualLocation = null) => {
       const newLng = location.longitude;
       
       // If location is almost the same, don't update
-      const threshold = 0.0001; // About 10 meters
+      const threshold = 0.0001;
       if (
         Math.abs(currentLat - newLat) < threshold && 
         Math.abs(currentLng - newLng) < threshold
@@ -215,7 +230,7 @@ const updateLocation = async (manualLocation = null) => {
         // Error is already handled in updateLocation
         console.log('Location tracking cycle skipped due to error');
       }
-    }, 20000); // Update every 20 seconds instead of 10 seconds
+    }, 40000); // Update every 40 seconds instead of 10 seconds
   };
   
   // Stop location tracking
