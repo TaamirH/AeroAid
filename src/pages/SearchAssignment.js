@@ -11,6 +11,9 @@ import { toast } from 'react-toastify';
 import MapView from '../components/map/MapView';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../services/firebase';
+import WeatherWidget from '../components/weather/WeatherWidget';
+import ChatWindow from '../components/chat/ChatWindow';
+
 
 const SearchAssignment = () => {
   const { id } = useParams();
@@ -730,34 +733,51 @@ const handleSubmitFinding = async (e) => {
                   }))}
                 />
               </div>
-              
+
+              {/* Weather Widget */}
+              {assignment?.searchArea?.center && (
+                <div className="mt-4">
+                  <h3 className="text-lg font-semibold mb-2">Weather Information</h3>
+                  <WeatherWidget 
+                    latitude={assignment.searchArea.center.latitude} 
+                    longitude={assignment.searchArea.center.longitude} 
+                  />
+                </div>
+              )}
+
               {emergency?.findings && emergency.findings.length > 0 && (
-  <div className="mt-4">
-    <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
-    <ul className="space-y-2 max-h-60 overflow-y-auto">
-      {emergency.findings.map((finding) => (
-        <li key={finding.id} className="bg-blue-50 p-3 rounded">
-          <p className="font-medium">{finding.description}</p>
-          
-          {/* Display Base64 image if available */}
-          {finding.imageBase64 && (
-            <div className="mt-2 mb-2">
-              <img 
-                src={finding.imageBase64}
-                alt="Finding evidence" 
-                className="max-h-60 w-auto rounded border border-gray-300" 
-              />
-            </div>
-          )}
-          
-          <p className="text-sm text-gray-600">
-            Reported at {formatTimestamp(finding.timestamp)}
-          </p>
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
+                <div className="mt-4">
+                  <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
+                  <ul className="space-y-2 max-h-60 overflow-y-auto">
+                    {emergency.findings.map((finding) => (
+                      <li key={finding.id} className="bg-blue-50 p-3 rounded">
+                        <p className="font-medium">{finding.description}</p>
+                        
+                        {/* Display Base64 image if available */}
+                        {finding.imageBase64 && (
+                          <div className="mt-2 mb-2">
+                            <img 
+                              src={finding.imageBase64}
+                              alt="Finding evidence" 
+                              className="max-h-60 w-auto rounded border border-gray-300" 
+                            />
+                          </div>
+                        )}
+                        
+                        <p className="text-sm text-gray-600">
+                          Reported at {formatTimestamp(finding.timestamp)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Add the ChatWindow component here */}
+              <div className="mt-6">
+                <ChatWindow emergencyId={emergency.id} />
+              </div>
+
             </div>
           </div>
           
