@@ -46,6 +46,12 @@ const SearchAssignment = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Add this state at the top of your component
+  const [selectedImage, setSelectedImage] = useState(null);
+
+  // Function to close the modal
+  const closeModal = () => setSelectedImage(null);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -80,8 +86,19 @@ const SearchAssignment = () => {
     
     // Subscribe to real-time updates for the assignment
     const unsubscribe = subscribeToSearchAssignment(id, (data) => {
+      console.log('Real-time update received:', data); // Debug log
       if (data) {
         setAssignment(data);
+        
+        // Update emergency details if findings change
+        if (data.emergencyId) {
+          getEmergencyById(data.emergencyId).then((updatedEmergency) => {
+            console.log('Updated emergency data:', updatedEmergency); // Debug log
+            setEmergency(updatedEmergency);
+          }).catch((error) => {
+            console.error('Error fetching emergency data:', error);
+          });
+        }
       }
     });
     
@@ -280,40 +297,44 @@ const updateLocation = async (manualLocation = null) => {
 
 const handleSubmitFinding = async (e) => {
   e.preventDefault();
-  
+
   try {
     setSubmittingFinding(true);
-    
+
     // Get location
     let findingLocation = findingForm.location;
     if (!findingLocation && assignment?.droneLocation) {
       findingLocation = {
         latitude: assignment.droneLocation.latitude,
-        longitude: assignment.droneLocation.longitude
+        longitude: assignment.droneLocation.longitude,
       };
     }
-    
+
     // Basic finding data
     const findingData = {
       description: findingForm.description,
       operatorId: currentUser.uid,
       location: findingLocation,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    
+
     // Add the image as Base64 if available
     if (imagePreview) {
       findingData.imageBase64 = imagePreview;
     }
-    
+
     // Add finding to emergency
     await addFindingToEmergency(emergency.id, findingData);
-    
+
+    // Fetch updated emergency data
+    const updatedEmergency = await getEmergencyById(emergency.id);
+    setEmergency(updatedEmergency); // Update the state with the latest data
+
     // Reset form
     setFindingForm({ description: '', location: null });
     setImageFile(null);
     setImagePreview(null);
-    
+
     toast.success('Finding reported successfully!');
   } catch (error) {
     console.error('Error:', error);
@@ -760,6 +781,7 @@ const handleSubmitFinding = async (e) => {
                 </div>
               )}
 
+              {/* Update the "Recent Findings" section to make images clickable */}
               {emergency?.findings && emergency.findings.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
@@ -774,7 +796,8 @@ const handleSubmitFinding = async (e) => {
                             <img 
                               src={finding.imageBase64}
                               alt="Finding evidence" 
-                              className="max-h-60 w-auto rounded border border-gray-300" 
+                              className="max-h-60 w-auto rounded border border-gray-300 cursor-pointer"
+                              onClick={() => setSelectedImage(finding.imageBase64)} // Set the selected image on click
                             />
                           </div>
                         )}
@@ -809,6 +832,25 @@ const handleSubmitFinding = async (e) => {
           )}
         </div>
       </div>
+
+      {/* Add this modal component at the bottom of your JSX */}
+      {selectedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="relative">
+            <img 
+              src={selectedImage} 
+              alt="Enlarged evidence" 
+              className="max-w-full max-h-screen rounded"
+            />
+            <button 
+              onClick={closeModal} 
+              className="absolute top-2 right-2 bg-white text-black rounded-full p-2"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
