@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 const NotificationsList = ({ userId }) => {
@@ -11,80 +11,58 @@ const NotificationsList = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      console.log('Fetching notifications for user ID:', userId);
-
-      // Test if we can access Firestore with a simpler test
-      try {
-        const testCollection = collection(db, 'users');
-        const testQuery = query(testCollection, limit(1)); // Just get any one document
-        await getDocs(testQuery);
-        console.log('Firebase connection test successful');
-      } catch (dbTestError) {
-        console.error('Firebase connection test failed:', dbTestError);
-        throw new Error(`Database connection failed: ${dbTestError.message}`);
-      }
-
-      // Now try to query notifications with a simple query that doesn't need an index
-      const notificationsRef = collection(db, 'notifications');
-      
-      // Simple query that only filters by userId without ordering
-      const q = query(
-        notificationsRef,
-        where('userId', '==', userId)
-      );
-      
-      console.log('Executing notifications query...');
-      const querySnapshot = await getDocs(q);
-      
-      console.log(`Query returned ${querySnapshot.size} notifications`);
-      
-      const notificationsList = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        notificationsList.push({
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate()
-        });
-      });
-      
-      // Sort notifications client-side instead of using orderBy in the query
-      notificationsList.sort((a, b) => {
-        // Handle cases where createdAt might be missing
-        if (!a.createdAt) return 1;
-        if (!b.createdAt) return -1;
-        return b.createdAt - a.createdAt; // Descending order (newest first)
-      });
-      
-      console.log('Processed and sorted notifications:', notificationsList);
-      setNotifications(notificationsList);
-      setLoading(false);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-      setError(err.message || 'Failed to load notifications');
-      setLoading(false);
-    }
-  };
-
-  // Load notifications on component mount
   useEffect(() => {
-    if (userId) {
-      fetchNotifications();
-    } else {
+    if (!userId) {
       setError("User ID is missing");
       setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    setError(null);
+    console.log('Setting up notifications listener for user:', userId);
+
+    // Set up real-time listener for notifications
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+
+    // Create the snapshot listener
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        console.log(`Received ${querySnapshot.size} notifications in real-time update`);
+
+        const notificationsList = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          notificationsList.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate()
+          });
+        });
+
+        setNotifications(notificationsList);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error in notifications listener:', err);
+        setError(err.message || 'Failed to load notifications');
+        setLoading(false);
+      }
+    );
+
+    // Clean up the listener when component unmounts
+    return () => unsubscribe();
   }, [userId]);
 
   const handleMarkAsRead = (notificationId) => {
-    // Simple local state update for read status
-    setNotifications(prev => 
-      prev.map(note => 
+    setNotifications(prev =>
+      prev.map(note =>
         note.id === notificationId ? { ...note, read: true } : note
       )
     );
@@ -103,13 +81,6 @@ const NotificationsList = ({ userId }) => {
     return (
       <div className="p-4 text-center">
         <p className="text-red-500">{error}</p>
-        <button 
-          onClick={fetchNotifications}
-          className="mt-2 text-sm bg-blue-500 hover:bg-blue-700 text-white py-1 px-3 rounded"
-        >
-          Try Again
-        </button>
-        
         <div className="mt-4 p-2 bg-gray-100 rounded text-left text-xs">
           <p className="font-bold mb-1">Debug Info:</p>
           <p>User ID: {userId}</p>
@@ -131,15 +102,8 @@ const NotificationsList = ({ userId }) => {
             </span>
           )}
         </h3>
-        
-        <button
-          onClick={fetchNotifications}
-          className="text-sm text-blue-600 hover:text-blue-800"
-        >
-          Refresh
-        </button>
       </div>
-      
+
       <div className="max-h-80 overflow-y-auto">
         {notifications.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
@@ -148,11 +112,11 @@ const NotificationsList = ({ userId }) => {
         ) : (
           <ul className="divide-y divide-gray-100">
             {notifications.map((notification) => (
-              <li 
-                key={notification.id} 
+              <li
+                key={notification.id}
                 className={`p-4 hover:bg-gray-50 transition-colors ${!notification.read ? 'bg-blue-50' : ''}`}
               >
-                <Link 
+                <Link
                   to={`/emergency/${notification.emergencyId}`}
                   onClick={() => handleMarkAsRead(notification.id)}
                   className="block"

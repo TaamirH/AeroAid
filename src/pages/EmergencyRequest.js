@@ -7,6 +7,8 @@ import { createEmergencyRequest } from '../services/emergencyService';
 import { getCurrentLocation, getAddressFromCoordinates } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
 import AddressAutocomplete from '../components/location/AddressAutocomplete';
+import { getOperatorAssignments } from '../services/searchService';
+
 
 const emergencyTypes = [
   'Missing Person',
@@ -19,7 +21,7 @@ const emergencyTypes = [
 ];
 
 const EmergencyRequest = () => {
-  const { currentUser } = useAuth();
+  const { currentUser,userProfile } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     type: emergencyTypes[0],
@@ -85,6 +87,20 @@ const EmergencyRequest = () => {
       setLoading(true);
       const emergencyId = await createEmergencyRequest(currentUser.uid, formData);
       toast.success('Emergency request submitted successfully!');
+      
+      // Check if an assignment was created for the current user
+      if (userProfile?.isDroneOperator) {
+        const assignments = await getOperatorAssignments(currentUser.uid);
+        const assignment = assignments.find(a => a.emergencyId === emergencyId);
+        
+        if (assignment) {
+          // Redirect to the search assignment page instead
+          navigate(`/search/${assignment.id}`);
+          return;
+        }
+      }
+      
+      // Otherwise redirect to emergency details
       navigate(`/emergency/${emergencyId}`);
     } catch (error) {
       console.error('Error creating emergency request:', error);

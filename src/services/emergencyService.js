@@ -16,6 +16,8 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { calculateDistance } from '../utils/geoUtils';
+import { acceptEmergency } from './searchService';
+
 
 // Create a new emergency request
 export const createEmergencyRequest = async (userId, data) => {
@@ -34,11 +36,41 @@ export const createEmergencyRequest = async (userId, data) => {
     };
     
     const docRef = await addDoc(collection(db, 'emergencies'), emergencyData);
+    const emergencyId = docRef.id;
     
-    // Find nearby drone operators (within 3km)
-    await notifyNearbyOperators(docRef.id, data.location, data.type);
+    // Find nearby drone operators
+    await notifyNearbyOperators(emergencyId, data.location, data.type);
     
-    return docRef.id;
+    // Auto-assign the creator to this emergency
+    // Only if the creator is a drone operator
+    try {
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists() && userSnap.data().isDroneOperator) {
+        console.log('Creator is a drone operator, auto-assigning...');
+        
+        // Use the same location for the assignment
+        const assignmentId = await acceptEmergency(
+          emergencyId, 
+          userId, 
+          data.location
+        );
+        
+        console.log('Created assignment for creator:', assignmentId);
+        
+        // Update emergency status to in-progress
+        await updateDoc(docRef, {
+          status: 'in-progress',
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (assignError) {
+      console.error('Error auto-assigning creator:', assignError);
+      // Don't throw here - we want the emergency to be created even if assignment fails
+    }
+    
+    return emergencyId;
   } catch (error) {
     console.error('Error creating emergency request:', error);
     throw error;
