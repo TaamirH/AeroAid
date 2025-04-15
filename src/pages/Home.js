@@ -167,7 +167,11 @@ const Home = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-100">
               <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full mr-4"></div>
+                <img
+                  src="https://randomuser.me/api/portraits/men/32.jpg"
+                  alt="John D."
+                  className="w-12 h-12 rounded-full mr-4"
+                />
                 <div>
                   <h4 className="font-bold">John D.</h4>
                   <p className="text-sm text-gray-500">Lost Hiker Found</p>
@@ -180,7 +184,11 @@ const Home = () => {
             
             <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-100">
               <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full mr-4"></div>
+                <img
+                  src="https://randomuser.me/api/portraits/women/44.jpg"
+                  alt="Maria S."
+                  className="w-12 h-12 rounded-full mr-4"
+                />
                 <div>
                   <h4 className="font-bold">Maria S.</h4>
                   <p className="text-sm text-gray-500">Drone Operator</p>
