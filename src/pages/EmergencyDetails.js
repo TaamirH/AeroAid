@@ -1,3 +1,4 @@
+// src/pages/EmergencyDetails.js
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -255,12 +256,24 @@ const EmergencyDetails = () => {
                     {emergency.findings.map((finding) => (
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
+                        
+                        {/* Display the Base64 image if available */}
+                        {finding.imageBase64 && (
+                          <div className="mt-2 mb-2">
+                            <img 
+                              src={finding.imageBase64}
+                              alt="Finding evidence" 
+                              className="max-h-60 w-auto rounded border border-gray-300" 
+                            />
+                          </div>
+                        )}
+                        
                         <p className="text-sm text-gray-600">
                           Reported by operator at {formatTimestamp(finding.timestamp)}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Location: Lat {finding.location.latitude.toFixed(6)}, 
-                          Lng {finding.location.longitude.toFixed(6)}
+                          Location: Lat {finding.location?.latitude.toFixed(6)}, 
+                          Lng {finding.location?.longitude.toFixed(6)}
                         </p>
                       </li>
                     ))}

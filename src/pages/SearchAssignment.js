@@ -9,6 +9,8 @@ import { getEmergencyById, addFindingToEmergency } from '../services/emergencySe
 import { getCurrentLocation } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
 import MapView from '../components/map/MapView';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../services/firebase';
 
 const SearchAssignment = () => {
   const { id } = useParams();
@@ -37,6 +39,10 @@ const SearchAssignment = () => {
   // Reference for location tracking interval
   const locationTrackingRef = useRef(null);
   
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -86,46 +92,70 @@ const SearchAssignment = () => {
   }, [id]);
   
   // Enhanced location update function
-  const updateLocation = async (manualLocation = null) => {
-    try {
-      setLocationError(null);
-      let location;
-      
-      if (manualLocation) {
-        location = manualLocation;
-      } else {
-        try {
-          // Add a console log before getCurrentLocation to track execution
-          console.log('Attempting to get current location...');
-          location = await getCurrentLocation();
-          console.log('Successfully got location:', location);
-        } catch (geoError) {
-          console.error('Browser geolocation failed:', geoError);
-          
-          // Use existing drone location as fallback without showing error
+// Update the updateLocation function with better null checks:
+
+const updateLocation = async (manualLocation = null) => {
+  try {
+    setLocationError(null);
+    let location;
+    
+    if (manualLocation) {
+      location = manualLocation;
+    } else {
+      try {
+        console.log('Attempting to get current location...');
+        location = await getCurrentLocation();
+        console.log('Successfully got location:', location);
+      } catch (geoError) {
+        console.error('Browser geolocation failed:', geoError);
+        
+        // Make sure assignment and droneLocation exist before using them
+        if (assignment && assignment.droneLocation) {
           console.log('Using existing drone location');
           location = {
             latitude: assignment.droneLocation.latitude,
             longitude: assignment.droneLocation.longitude
           };
-          
-          // Don't throw, just use the fallback silently
-          toast.info('Using existing location as fallback');
+        } else {
+          throw new Error('Could not get location and no fallback available');
         }
       }
-      
-      // Update drone location in database
-      console.log('Updating drone location to:', location);
-      await updateDroneLocation(id, location);
-      toast.success('Drone location updated');
-      
-      return true;
-    } catch (error) {
-      console.error('Error updating location:', error);
-      setLocationError(error.message);
-      return false;
     }
-  };
+    
+    // Only check for significant changes if we have existing droneLocation
+    if (assignment && assignment.droneLocation && !manualLocation) {
+      const currentLat = assignment.droneLocation.latitude;
+      const currentLng = assignment.droneLocation.longitude;
+      const newLat = location.latitude;
+      const newLng = location.longitude;
+      
+      // If location is almost the same, don't update
+      const threshold = 0.0001; // About 10 meters
+      if (
+        Math.abs(currentLat - newLat) < threshold && 
+        Math.abs(currentLng - newLng) < threshold
+      ) {
+        console.log('Location hasn\'t changed significantly, skipping update');
+        return true;
+      }
+    }
+    
+    // Update drone location in database
+    console.log('Updating drone location to:', location);
+    await updateDroneLocation(id, location);
+    
+    // Only show toast for manual updates
+    if (!locationTrackingRef.current) {
+      toast.success('Drone location updated');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error updating location:', error);
+    setLocationError(error.message);
+    return false;
+  }
+};
   
   // Manual coordinates handler
   const handleManualCoordinateChange = (e) => {
@@ -174,6 +204,7 @@ const SearchAssignment = () => {
     
     console.log('Starting location tracking');
     
+    // Use a flag to indicate this is an automatic update
     locationTrackingRef.current = setInterval(async () => {
       try {
         await updateLocation();
@@ -181,7 +212,7 @@ const SearchAssignment = () => {
         // Error is already handled in updateLocation
         console.log('Location tracking cycle skipped due to error');
       }
-    }, 10000); // Update every 10 seconds
+    }, 20000); // Update every 20 seconds instead of 10 seconds
   };
   
   // Stop location tracking
@@ -227,40 +258,53 @@ const SearchAssignment = () => {
     }
   };
   
-  const handleSubmitFinding = async (e) => {
-    e.preventDefault();
+// In handleSubmitFinding function, modify the try/catch block:
+
+const handleSubmitFinding = async (e) => {
+  e.preventDefault();
+  
+  try {
+    setSubmittingFinding(true);
     
-    try {
-      setSubmittingFinding(true);
-      
-      // If no location is set, use the current drone location
-      let findingLocation = findingForm.location;
-      if (!findingLocation) {
-        console.log('No finding location set, using drone location');
-        findingLocation = {
-          latitude: assignment.droneLocation.latitude,
-          longitude: assignment.droneLocation.longitude
-        };
-      }
-      
-      await addFindingToEmergency(emergency.id, {
-        description: findingForm.description,
-        location: findingLocation,
-        operatorId: currentUser.uid
-      });
-      
-      toast.success('Finding reported successfully!');
-      setFindingForm({
-        description: '',
-        location: null
-      });
-    } catch (error) {
-      console.error('Error submitting finding:', error);
-      toast.error('Failed to submit finding: ' + error.message);
-    } finally {
-      setSubmittingFinding(false);
+    // Get location
+    let findingLocation = findingForm.location;
+    if (!findingLocation && assignment?.droneLocation) {
+      findingLocation = {
+        latitude: assignment.droneLocation.latitude,
+        longitude: assignment.droneLocation.longitude
+      };
     }
-  };
+    
+    // Basic finding data
+    const findingData = {
+      description: findingForm.description,
+      operatorId: currentUser.uid,
+      location: findingLocation,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add the image as Base64 if available
+    if (imagePreview) {
+      findingData.imageBase64 = imagePreview;
+    }
+    
+    // Add finding to emergency
+    await addFindingToEmergency(emergency.id, findingData);
+    
+    // Reset form
+    setFindingForm({ description: '', location: null });
+    setImageFile(null);
+    setImagePreview(null);
+    
+    toast.success('Finding reported successfully!');
+  } catch (error) {
+    console.error('Error:', error);
+    toast.error('Error: ' + error.message);
+  } finally {
+    setSubmittingFinding(false);
+  }
+};
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Unknown time';
     
@@ -282,19 +326,84 @@ const SearchAssignment = () => {
     if (window.confirm('Are you sure you want to complete this assignment?')) {
       try {
         setCompletingAssignment(true);
+        
+        // Stop location tracking before completing
+        if (locationTrackingRef.current) {
+          clearInterval(locationTrackingRef.current);
+          locationTrackingRef.current = null;
+        }
+        
+        // Complete the assignment
         await completeSearchAssignment(id);
+        
         toast.success('Assignment completed successfully!');
-        stopLocationTracking();
-        navigate('/dashboard');
+        
+        // Use a setTimeout to give the toast time to show before navigation
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 1500);
       } catch (error) {
         console.error('Error completing assignment:', error);
-        toast.error('Failed to complete assignment: ' + error.message);
-      } finally {
+        toast.error('Failed to complete assignment: ' + (error.message || 'Unknown error'));
         setCompletingAssignment(false);
       }
     }
   };
   
+  const handleImageChange = (e) => {
+    if (e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      
+      // Create a preview and convert to Base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result); // This is the Base64 representation
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  
+
+
+  const uploadImage = async () => {
+    console.log('uploadImage called');
+    if (!imageFile) {
+      console.log('No image file, returning null');
+      return null;
+    }
+    
+    try {
+      console.log('Starting upload for:', imageFile.name);
+      setUploadingImage(true);
+      
+      // Create a unique file path
+      const fileName = `${Date.now()}_${imageFile.name}`;
+      const filePath = `findings/${emergency.id}/${fileName}`;
+      console.log('File will be uploaded to:', filePath);
+      
+      const storageRef = ref(storage, filePath);
+      
+      // Upload file
+      console.log('Starting uploadBytes...');
+      const snapshot = await uploadBytes(storageRef, imageFile);
+      console.log('uploadBytes completed:', snapshot);
+      
+      // Get URL
+      console.log('Getting download URL...');
+      const url = await getDownloadURL(snapshot.ref);
+      console.log('Download URL obtained:', url);
+      
+      return url;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error; // Re-throw to be handled by caller
+    } finally {
+      console.log('Setting uploadingImage to false');
+      setUploadingImage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -500,6 +609,53 @@ const SearchAssignment = () => {
                       ></textarea>
                     </div>
                     
+                    {/* Add photo upload section */}
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                        Photo Evidence (Optional)
+                      </label>
+                      <div className="flex items-center">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                          id="photo-upload"
+                        />
+                        <label
+                          htmlFor="photo-upload"
+                          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
+                        >
+                          Select Photo
+                        </label>
+                        {imageFile && (
+                          <span className="ml-2 text-sm">
+                            {imageFile.name} ({Math.round(imageFile.size / 1024)} KB)
+                          </span>
+                        )}
+                      </div>
+                      
+                      {imagePreview && (
+                        <div className="mt-2">
+                          <img 
+                            src={imagePreview} 
+                            alt="Preview" 
+                            className="h-40 object-contain border rounded" 
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImageFile(null);
+                              setImagePreview(null);
+                            }}
+                            className="mt-1 text-xs text-red-600 hover:text-red-800"
+                          >
+                            Remove Photo
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    
                     <div className="mb-4">
                       <p className="block text-gray-700 text-sm font-bold mb-2">
                         Finding Location
@@ -523,7 +679,7 @@ const SearchAssignment = () => {
                     <button
                       type="submit"
                       className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                      disabled={submittingFinding}
+                      disabled={submittingFinding || uploadingImage}
                     >
                       {submittingFinding ? 'Submitting...' : 'Report Finding'}
                     </button>
@@ -576,20 +732,32 @@ const SearchAssignment = () => {
               </div>
               
               {emergency?.findings && emergency.findings.length > 0 && (
-                <div className="mt-4">
-                  <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
-                  <ul className="space-y-2 max-h-60 overflow-y-auto">
-                    {emergency.findings.map((finding) => (
-                      <li key={finding.id} className="bg-blue-50 p-3 rounded">
-                        <p className="font-medium">{finding.description}</p>
-                        <p className="text-sm text-gray-600">
-                          Reported at {formatTimestamp(finding.timestamp)}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+  <div className="mt-4">
+    <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
+    <ul className="space-y-2 max-h-60 overflow-y-auto">
+      {emergency.findings.map((finding) => (
+        <li key={finding.id} className="bg-blue-50 p-3 rounded">
+          <p className="font-medium">{finding.description}</p>
+          
+          {/* Display Base64 image if available */}
+          {finding.imageBase64 && (
+            <div className="mt-2 mb-2">
+              <img 
+                src={finding.imageBase64}
+                alt="Finding evidence" 
+                className="max-h-60 w-auto rounded border border-gray-300" 
+              />
+            </div>
+          )}
+          
+          <p className="text-sm text-gray-600">
+            Reported at {formatTimestamp(finding.timestamp)}
+          </p>
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
             </div>
           </div>
           

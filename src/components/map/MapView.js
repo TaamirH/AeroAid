@@ -1,3 +1,4 @@
+//components/map/Mapview.js
 import React, { useEffect, useRef } from 'react';
 
 // This is a simplified map implementation using Leaflet

@@ -1,3 +1,4 @@
+//src/services/searchService.js
 import { 
     collection, 
     addDoc, 
@@ -176,16 +177,27 @@ import {
   // Complete search assignment
   export const completeSearchAssignment = async (assignmentId) => {
     try {
+      console.log('Completing assignment:', assignmentId);
       const docRef = doc(db, 'searchAssignments', assignmentId);
+      
+      // Check if the document exists first
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        throw new Error('Assignment not found');
+      }
+      
+      // Update the assignment
       await updateDoc(docRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      
+      console.log('Assignment completed successfully');
       return true;
     } catch (error) {
       console.error('Error completing assignment:', error);
-      throw error;
+      throw error; // Re-throw to be handled by caller
     }
   };
   

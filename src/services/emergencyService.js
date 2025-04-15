@@ -131,13 +131,28 @@ export const getEmergencyById = async (id) => {
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
-      return {
+      const data = docSnap.data();
+      
+      // Process the data
+      const processedData = {
         id: docSnap.id,
-        ...docSnap.data(),
-        createdAt: docSnap.data().createdAt?.toDate(),
-        updatedAt: docSnap.data().updatedAt?.toDate(),
-        resolvedAt: docSnap.data().resolvedAt?.toDate()
+        ...data,
+        createdAt: data.createdAt?.toDate(),
+        updatedAt: data.updatedAt?.toDate(),
+        resolvedAt: data.resolvedAt?.toDate()
       };
+      
+      // Ensure findings data structure is maintained
+      if (Array.isArray(processedData.findings)) {
+        processedData.findings.forEach(finding => {
+          // Make sure imageBase64 is preserved if it exists
+          if (finding.imageBase64) {
+            finding.imageBase64 = finding.imageBase64;
+          }
+        });
+      }
+      
+      return processedData;
     } else {
       return null;
     }
@@ -215,27 +230,33 @@ export const updateEmergencyStatus = async (id, status) => {
 // Add finding to emergency
 export const addFindingToEmergency = async (emergencyId, finding) => {
   try {
+    console.log('Adding finding to emergency:', emergencyId);
     const docRef = doc(db, 'emergencies', emergencyId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
       const emergencyData = docSnap.data();
-      const findings = emergencyData.findings || [];
+      const findings = Array.isArray(emergencyData.findings) ? emergencyData.findings : [];
       
-      // Create a new finding with regular JavaScript Date object instead of serverTimestamp
+      // Create a new finding with ID
       const newFinding = {
         id: Date.now().toString(),
         ...finding,
-        timestamp: new Date().toISOString() // Use ISO string instead of serverTimestamp
+        timestamp: new Date().toISOString()
       };
       
+      console.log('New finding data being added:', newFinding);
+      
+      // Add the new finding to the findings array
       findings.push(newFinding);
       
+      // Update the emergency document with the new findings array
       await updateDoc(docRef, {
         findings,
-        updatedAt: serverTimestamp() // serverTimestamp is fine here, just not inside the array
+        updatedAt: serverTimestamp()
       });
       
+      console.log('Finding added successfully');
       return newFinding.id;
     } else {
       throw new Error('Emergency not found');
@@ -245,6 +266,8 @@ export const addFindingToEmergency = async (emergencyId, finding) => {
     throw error;
   }
 };
+
+
 export const createTestEmergencyForNotifications = async (creatorId, location, notify = true) => {
   try {
     // Create a test emergency
