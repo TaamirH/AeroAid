@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getEmergencyById, subscribeToEmergency, updateEmergencyStatus } from '../services/emergencyService';
-import { acceptEmergency, getOperatorAssignments } from '../services/searchService';
+import { acceptEmergency, getOperatorAssignments, getSearchAssignmentById } from '../services/searchService';
 import { getCurrentLocation, calculateDistance } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
 import MapView from '../components/map/MapView';
@@ -18,6 +18,8 @@ const EmergencyDetails = () => {
   const [accepting, setAccepting] = useState(false);
   const [userAssignment, setUserAssignment] = useState(null);
   const [userDistance, setUserDistance] = useState(null);
+  const [hasActiveAssignments, setHasActiveAssignments] = useState(false);
+  const [activeAssignmentId, setActiveAssignmentId] = useState(null);
   
   useEffect(() => {
     const fetchEmergency = async () => {
@@ -25,11 +27,35 @@ const EmergencyDetails = () => {
         const data = await getEmergencyById(id);
         setEmergency(data);
         
-        // If user is a drone operator, check if they already have an assignment for this emergency
+        // If user is a drone operator, check their status
         if (userProfile?.isDroneOperator) {
-          const assignments = await getOperatorAssignments(currentUser.uid);
-          const assignment = assignments.find(a => a.emergencyId === id);
-          setUserAssignment(assignment);
+          // Check if the user already has an active emergency directly from their profile
+          if (userProfile.emergencyId) {
+            // User has an active emergency
+            setHasActiveAssignments(true);
+            
+            // If it's this emergency, get the assignment
+            if (userProfile.emergencyId === id && userProfile.currentAssignmentId) {
+              const assignment = await getSearchAssignmentById(userProfile.currentAssignmentId);
+              setUserAssignment(assignment);
+              setActiveAssignmentId(userProfile.currentAssignmentId);
+            } else {
+              // It's a different emergency
+              setActiveAssignmentId(userProfile.currentAssignmentId);
+            }
+          } else {
+            // Fallback to the original method if the emergencyId field is not set
+            // This handles cases where the database might not be fully migrated yet
+            const assignments = await getOperatorAssignments(currentUser.uid);
+            const assignment = assignments.find(a => a.emergencyId === id);
+            setUserAssignment(assignment);
+            
+            // Check if user has any active assignments
+            setHasActiveAssignments(assignments.length > 0);
+            if (assignments.length > 0) {
+              setActiveAssignmentId(assignments[0].id);
+            }
+          }
           
           // Calculate distance from operator to emergency
           if (userProfile.location && data.location) {
@@ -115,21 +141,17 @@ const EmergencyDetails = () => {
     return new Date(date).toLocaleString();
   };
   
-  // Helper function to format timestamps that could be in different formats
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Unknown time';
     
-    // Handle string ISO timestamps (new format)
     if (typeof timestamp === 'string') {
       return new Date(timestamp).toLocaleString();
     }
     
-    // Handle Firestore Timestamps (old format)
     if (timestamp.toDate && typeof timestamp.toDate === 'function') {
       return timestamp.toDate().toLocaleString();
     }
     
-    // Fallback
     return 'Unknown time';
   };
   
@@ -156,11 +178,11 @@ const EmergencyDetails = () => {
   const isCreator = currentUser.uid === emergency.userId;
   const canAccept = userProfile?.isDroneOperator && 
                    !userAssignment && 
+                   !hasActiveAssignments &&
                    emergency.status !== 'resolved' && 
                    (userDistance === null || userDistance <= 3);
 
-  // Check if the user can view the emergency (any logged-in user)
-  const canView = !!currentUser; // Ensure the user is logged in
+  const canView = !!currentUser;
 
   if (!canView) {
     return (
@@ -257,7 +279,6 @@ const EmergencyDetails = () => {
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
                         
-                        {/* Display the Base64 image if available */}
                         {finding.imageBase64 && (
                           <div className="mt-2 mb-2">
                             <img 
@@ -292,6 +313,19 @@ const EmergencyDetails = () => {
               >
                 {accepting ? 'Accepting...' : 'Accept Emergency'}
               </button>
+            )}
+            
+            {userProfile?.isDroneOperator && hasActiveAssignments && !userAssignment && (
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-yellow-800 max-w-md">
+                <p className="font-medium">You already have an active assignment</p>
+                <p className="text-sm mt-1">You can only accept one emergency at a time. Please complete your current assignment first.</p>
+                <Link 
+                  to={`/search/${activeAssignmentId}`}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium mt-2 inline-block"
+                >
+                  Go to my active assignment →
+                </Link>
+              </div>
             )}
             
             {userAssignment && (

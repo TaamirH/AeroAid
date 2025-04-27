@@ -16,10 +16,9 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { calculateDistance } from '../utils/geoUtils';
-import { acceptEmergency } from './searchService';
+import { acceptEmergency, getOperatorAssignments } from './searchService'; // Ensure this is imported
 
-
-// Create a new emergency request
+// Create a new emergency request without auto-assigning the creator
 export const createEmergencyRequest = async (userId, data) => {
   try {
     const emergencyData = {
@@ -32,7 +31,8 @@ export const createEmergencyRequest = async (userId, data) => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       resolvedAt: null,
-      findings: []
+      findings: [],
+      operatorId: null  // Explicitly setting operatorId to null initially
     };
     
     const docRef = await addDoc(collection(db, 'emergencies'), emergencyData);
@@ -41,34 +41,8 @@ export const createEmergencyRequest = async (userId, data) => {
     // Find nearby drone operators
     await notifyNearbyOperators(emergencyId, data.location, data.type);
     
-    // Auto-assign the creator to this emergency
-    // Only if the creator is a drone operator
-    try {
-      const userRef = doc(db, 'users', userId);
-      const userSnap = await getDoc(userRef);
-      
-      if (userSnap.exists() && userSnap.data().isDroneOperator) {
-        console.log('Creator is a drone operator, auto-assigning...');
-        
-        // Use the same location for the assignment
-        const assignmentId = await acceptEmergency(
-          emergencyId, 
-          userId, 
-          data.location
-        );
-        
-        console.log('Created assignment for creator:', assignmentId);
-        
-        // Update emergency status to in-progress
-        await updateDoc(docRef, {
-          status: 'in-progress',
-          updatedAt: serverTimestamp()
-        });
-      }
-    } catch (assignError) {
-      console.error('Error auto-assigning creator:', assignError);
-      // Don't throw here - we want the emergency to be created even if assignment fails
-    }
+    // We've removed the auto-assignment code that was here
+    // No longer automatically assigning the creator as the operator
     
     return emergencyId;
   } catch (error) {

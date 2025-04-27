@@ -8,7 +8,7 @@ import {
   updateProfile,
   sendPasswordResetEmail 
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
 const AuthContext = createContext();
@@ -79,6 +79,32 @@ export function AuthProvider({ children }) {
       if (userSnap.exists()) {
         const userData = userSnap.data();
         console.log('User profile data retrieved:', userData);
+        
+        // If the user has an emergencyId but no assignment, we should verify
+        if (userData.emergencyId && userData.currentAssignmentId) {
+          try {
+            // Check if the assignment still exists and is active
+            const assignmentRef = doc(db, 'searchAssignments', userData.currentAssignmentId);
+            const assignmentSnap = await getDoc(assignmentRef);
+            
+            if (!assignmentSnap.exists() || assignmentSnap.data().status !== 'active') {
+              // Assignment doesn't exist or is not active anymore, clear the fields
+              console.log('Clearing stale emergency assignment data');
+              await updateDoc(userRef, {
+                emergencyId: deleteField(),
+                currentAssignmentId: deleteField()
+              });
+              
+              // Update the user data before returning
+              userData.emergencyId = null;
+              userData.currentAssignmentId = null;
+            }
+          } catch (verifyError) {
+            console.error('Error verifying assignment:', verifyError);
+            // Don't block the profile fetch if this check fails
+          }
+        }
+        
         setUserProfile(userData);
         return userData;
       } else {
@@ -90,7 +116,9 @@ export function AuthProvider({ children }) {
           isDroneOperator: false,
           location: null,
           createdAt: new Date().toISOString(),
-          lastActive: new Date().toISOString()
+          lastActive: new Date().toISOString(),
+          emergencyId: null,
+          currentAssignmentId: null
         };
         
         // Save the default profile to Firestore
@@ -110,6 +138,8 @@ export function AuthProvider({ children }) {
         location: null,
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
+        emergencyId: null,
+        currentAssignmentId: null,
         error: true
       };
       setUserProfile(fallbackProfile);
