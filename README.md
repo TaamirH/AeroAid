@@ -30,7 +30,7 @@ AeroAid is a web application that connects emergency situations with nearby dron
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/aeroaid.git
+   git clone https://github.com/TaamirH/AeroAid.git
    cd aeroaid
    ```
 
