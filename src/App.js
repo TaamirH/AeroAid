@@ -17,6 +17,7 @@ import EmergencyRequest from './pages/EmergencyRequest';
 import EmergencyDetails from './pages/EmergencyDetails';
 import Dashboard from './pages/Dashboard';
 import SearchAssignment from './pages/SearchAssignment';
+import DesignSystem from './pages/DesignSystem';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="/emergency/:id" element={<PrivateRoute><EmergencyDetails /></PrivateRoute>} />
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/search/:id" element={<PrivateRoute><SearchAssignment /></PrivateRoute>} />
+          <Route path="/design-system" element={<DesignSystem />} />        
         </Routes>
       </div>
       <ToastContainer position="bottom-right" />
