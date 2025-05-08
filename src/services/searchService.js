@@ -42,27 +42,54 @@ export const acceptEmergency = async (emergencyId, operatorId, operatorLocation)
       throw new Error('This emergency has already been accepted by another operator.');
     }
     
-    // Create a search assignment
-    const searchArea = generateSearchArea(
-      emergencyData.location.latitude,
-      emergencyData.location.longitude,
-      operatorLocation.latitude,
-      operatorLocation.longitude
+    // Find existing search assignment for this emergency
+    const assignmentsRef = collection(db, 'searchAssignments');
+    const q = query(
+      assignmentsRef, 
+      where('emergencyId', '==', emergencyId),
+      where('status', '==', 'active')
     );
     
-    const assignmentData = {
-      emergencyId,
-      operatorId,
-      status: 'active', // active, completed
-      startLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
-      searchArea,
-      droneLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      completedAt: null
-    };
+    const querySnapshot = await getDocs(q);
+    let assignmentId;
     
-    const docRef = await addDoc(collection(db, 'searchAssignments'), assignmentData);
+    if (querySnapshot.empty) {
+      // If no assignment exists (this shouldn't happen with the new flow), create one
+      console.log("No existing assignment found, creating new one");
+      const searchArea = generateSearchArea(
+        emergencyData.location.latitude,
+        emergencyData.location.longitude,
+        operatorLocation.latitude,
+        operatorLocation.longitude
+      );
+      
+      const assignmentData = {
+        emergencyId,
+        operatorId,
+        status: 'active',
+        startLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
+        searchArea,
+        droneLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        completedAt: null
+      };
+      
+      const docRef = await addDoc(collection(db, 'searchAssignments'), assignmentData);
+      assignmentId = docRef.id;
+    } else {
+      // Update the existing assignment with the operator's info
+      console.log("Found existing assignment, updating with operator details");
+      const assignmentDoc = querySnapshot.docs[0];
+      assignmentId = assignmentDoc.id;
+      
+      await updateDoc(doc(db, 'searchAssignments', assignmentId), {
+        operatorId,
+        startLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
+        droneLocation: new GeoPoint(operatorLocation.latitude, operatorLocation.longitude),
+        updatedAt: serverTimestamp()
+      });
+    }
     
     // Update emergency document with the operatorId and change status
     await updateDoc(emergencyRef, {
@@ -76,13 +103,13 @@ export const acceptEmergency = async (emergencyId, operatorId, operatorLocation)
     const userRef = doc(db, 'users', operatorId);
     await updateDoc(userRef, {
       emergencyId: emergencyId,
-      currentAssignmentId: docRef.id,
+      currentAssignmentId: assignmentId,
       lastEmergencyAccepted: serverTimestamp()
     });
     
-    console.log(`Updated user ${operatorId} with emergencyId ${emergencyId} and assignmentId ${docRef.id}`);
+    console.log(`Updated user ${operatorId} with emergencyId ${emergencyId} and assignmentId ${assignmentId}`);
     
-    return docRef.id;
+    return assignmentId;
   } catch (error) {
     console.error('Error accepting emergency:', error);
     throw error;
@@ -217,19 +244,40 @@ export const completeSearchAssignment = async (assignmentId) => {
       updatedAt: serverTimestamp()
     });
     
-    // Clear the operatorId from the emergency document if this was the assigned operator
-    // (Only if the emergency isn't resolved yet)
+    // Get the related emergency
     const emergencyRef = doc(db, 'emergencies', assignmentData.emergencyId);
     const emergencySnap = await getDoc(emergencyRef);
     
     if (emergencySnap.exists()) {
       const emergencyData = emergencySnap.data();
       
-      if (emergencyData.status !== 'resolved' && 
-          emergencyData.operatorId === assignmentData.operatorId) {
+      // Check if there are any other active assignments for this emergency
+      const assignmentsRef = collection(db, 'searchAssignments');
+      const otherAssignmentsQuery = query(
+        assignmentsRef,
+        where('emergencyId', '==', assignmentData.emergencyId),
+        where('status', '==', 'active'),
+        where('__name__', '!=', assignmentId) // Exclude the current assignment
+      );
+      
+      const otherAssignmentsSnap = await getDocs(otherAssignmentsQuery);
+      
+      // If there are no other active assignments, update the emergency status
+      if (otherAssignmentsSnap.empty) {
+        // If the emergency isn't already resolved, update its status
+        if (emergencyData.status !== 'resolved') {
+          await updateDoc(emergencyRef, {
+            status: 'completed', // New status to show work is done but not yet resolved
+            updatedAt: serverTimestamp()
+          });
+          console.log(`Updated emergency ${assignmentData.emergencyId} status to 'completed'`);
+        }
+      }
+      
+      // Always clear the operatorId if this was the assigned operator
+      if (emergencyData.operatorId === assignmentData.operatorId) {
         await updateDoc(emergencyRef, {
           operatorId: null,
-          status: 'active', // Set back to active so another operator can accept it
           updatedAt: serverTimestamp()
         });
         console.log(`Cleared operatorId from emergency ${assignmentData.emergencyId}`);

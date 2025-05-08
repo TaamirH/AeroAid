@@ -14,7 +14,6 @@ import { storage } from '../services/firebase';
 import WeatherWidget from '../components/weather/WeatherWidget';
 import ChatWindow from '../components/chat/ChatWindow';
 
-
 const SearchAssignment = () => {
   const { id } = useParams();
   const { currentUser, userProfile } = useAuth();
@@ -29,7 +28,8 @@ const SearchAssignment = () => {
   });
   const [submittingFinding, setSubmittingFinding] = useState(false);
   const [completingAssignment, setCompletingAssignment] = useState(false);
-  
+  const [isOperator, setIsOperator] = useState(false);
+
   // Location handling states
   const [locationError, setLocationError] = useState(null);
   const [manualLocationUpdating, setManualLocationUpdating] = useState(false);
@@ -64,6 +64,7 @@ const SearchAssignment = () => {
         if (assignmentData) {
           // Get related emergency details
           const emergencyData = await getEmergencyById(assignmentData.emergencyId);
+          setIsOperator(assignmentData.operatorId === currentUser.uid);
           setEmergency(emergencyData);
           
           // Set initial coordinates for manual input based on current drone location
@@ -102,8 +103,18 @@ const SearchAssignment = () => {
       }
     });
     
-    // Start location tracking if assignment is active
-    startLocationTracking();
+    // Replace the simple startLocationTracking() call with this conditional tracking
+    // Start location tracking if assignment is active AND user is the operator
+    const startTracking = async () => {
+      const assignmentData = await getSearchAssignmentById(id);
+      if (assignmentData && assignmentData.operatorId === currentUser.uid && assignmentData.status === 'active') {
+        startLocationTracking();
+      }
+    };
+
+    if (isOperator) {
+      startTracking();
+    }
     
     return () => {
       unsubscribe();
@@ -404,7 +415,6 @@ const handleSubmitFinding = async (e) => {
   };
   
 
-
   const uploadImage = async () => {
     console.log('uploadImage called');
     if (!imageFile) {
@@ -463,23 +473,29 @@ const handleSubmitFinding = async (e) => {
     );
   }
   
-  // Check if the assignment belongs to the current user
-  if (assignment.operatorId !== currentUser.uid) {
-    return (
-      <div className="text-center py-8">
-        <h2 className="text-xl font-bold mb-4">Unauthorized</h2>
-        <p>You don't have permission to view this assignment.</p>
-        <Link to="/dashboard" className="text-blue-500 hover:underline mt-4 inline-block">
-          Return to Dashboard
-        </Link>
-      </div>
-    );
-  }
+
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
         <Link to="/dashboard" className="text-blue-500 hover:underline">&larr; Back to Dashboard</Link>
+        {!isOperator && (
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-md mt-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-blue-800">View-Only Mode</h3>
+                <div className="mt-2 text-sm text-blue-700">
+                  <p>You are viewing this search assignment in read-only mode. Only the assigned drone operator can update the assignment or report findings.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       
       <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
@@ -533,14 +549,16 @@ const handleSubmitFinding = async (e) => {
                   Lng: {assignment.droneLocation.longitude.toFixed(6)}
                 </p>
                 
-                <button
-                  type="button"
-                  onClick={() => updateLocation()}
-                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
-                  disabled={manualLocationUpdating}
-                >
-                  Update Drone Location
-                </button>
+                {isOperator && (
+                  <button
+                    type="button"
+                    onClick={() => updateLocation()}
+                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
+                    disabled={manualLocationUpdating}
+                  >
+                    Update Drone Location
+                  </button>
+                )}
               </div>
               
               {locationError && (
@@ -819,7 +837,7 @@ const handleSubmitFinding = async (e) => {
             </div>
           </div>
           
-          {assignment.status === 'active' && (
+          {assignment.status === 'active' && isOperator && (
             <div className="mt-8 flex justify-center border-t border-gray-200 pt-6">
               <button
                 onClick={handleCompleteAssignment}
@@ -828,6 +846,17 @@ const handleSubmitFinding = async (e) => {
               >
                 {completingAssignment ? 'Completing...' : 'Complete Assignment'}
               </button>
+            </div>
+          )}
+
+          {!isOperator && emergency && (
+            <div className="mt-8 flex justify-center border-t border-gray-200 pt-6">
+              <Link
+                to={`/emergency/${emergency.id}`}
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
+              >
+                Return to Emergency Details
+              </Link>
             </div>
           )}
         </div>

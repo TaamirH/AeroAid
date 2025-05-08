@@ -8,7 +8,16 @@ import { getCurrentLocation, getAddressFromCoordinates } from '../utils/geoUtils
 import { toast } from 'react-toastify';
 import AddressAutocomplete from '../components/location/AddressAutocomplete';
 import { getOperatorAssignments } from '../services/searchService';
-
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs,
+  serverTimestamp, 
+  GeoPoint 
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 const emergencyTypes = [
   'Missing Person',
@@ -19,6 +28,12 @@ const emergencyTypes = [
   'Medical Emergency',
   'Other'
 ];
+const emergencyStatuses = {
+  ACTIVE: 'active',
+  IN_PROGRESS: 'in-progress',
+  COMPLETED: 'completed', // New status for completed assignments
+  RESOLVED: 'resolved'
+};
 
 const EmergencyRequest = () => {
   const { currentUser,userProfile } = useAuth();
@@ -76,6 +91,7 @@ const EmergencyRequest = () => {
     }));
   };
 
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -85,7 +101,61 @@ const EmergencyRequest = () => {
     
     try {
       setLoading(true);
+      
+      // Create emergency request
       const emergencyId = await createEmergencyRequest(currentUser.uid, formData);
+      
+      // AUTOMATICALLY CREATE SEARCH ASSIGNMENT
+      try {
+        console.log('Creating search assignment for emergency:', emergencyId);
+        
+        // Check for existing assignments first
+        const assignmentsRef = collection(db, 'searchAssignments');
+        const q = query(
+          assignmentsRef,
+          where('emergencyId', '==', emergencyId)
+        );
+        
+        const existingAssignments = await getDocs(q);
+        
+        // Only create a new assignment if none exist
+        if (existingAssignments.empty) {
+          // Create search area
+          const searchArea = {
+            north: formData.location.latitude + 0.003,
+            south: formData.location.latitude - 0.003,
+            east: formData.location.longitude + 0.003,
+            west: formData.location.longitude - 0.003,
+            center: {
+              latitude: formData.location.latitude,
+              longitude: formData.location.longitude
+            }
+          };
+          
+          // Create assignment data
+          const assignmentData = {
+            emergencyId,
+            operatorId: null, // No operator assigned yet
+            status: 'active',
+            startLocation: null, // Will be set when an operator accepts
+            searchArea, 
+            droneLocation: new GeoPoint(formData.location.latitude, formData.location.longitude),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            completedAt: null
+          };
+          
+          // Add to Firestore - use the imported functions
+          const docRef = await addDoc(collection(db, 'searchAssignments'), assignmentData);
+          console.log('Search assignment created with ID:', docRef.id);
+        } else {
+          console.log('Search assignments already exist for this emergency. Skipping creation.');
+        }
+      } catch (assignmentError) {
+        console.error('Error creating search assignment:', assignmentError);
+        // Don't stop the user journey if assignment creation fails
+      }
+      
       toast.success('Emergency request submitted successfully!');
       
       // Check if an assignment was created for the current user

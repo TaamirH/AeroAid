@@ -21,28 +21,32 @@ import { acceptEmergency, getOperatorAssignments } from './searchService'; // En
 // Create a new emergency request without auto-assigning the creator
 export const createEmergencyRequest = async (userId, data) => {
   try {
+    console.log('Creating emergency request:', userId, data);
+    
+    // Create the emergency document
     const emergencyData = {
       userId,
       type: data.type,
       details: data.details,
       location: new GeoPoint(data.location.latitude, data.location.longitude),
       address: data.address,
-      status: 'active', // active, in-progress, resolved
+      status: 'active',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       resolvedAt: null,
       findings: [],
-      operatorId: null  // Explicitly setting operatorId to null initially
+      operatorId: null
     };
     
-    const docRef = await addDoc(collection(db, 'emergencies'), emergencyData);
+    // Use imported collection and db
+    const emergenciesRef = collection(db, 'emergencies');
+    const docRef = await addDoc(emergenciesRef, emergencyData);
     const emergencyId = docRef.id;
     
-    // Find nearby drone operators
-    await notifyNearbyOperators(emergencyId, data.location, data.type);
+    console.log('Emergency created with ID:', emergencyId);
     
-    // We've removed the auto-assignment code that was here
-    // No longer automatically assigning the creator as the operator
+    // Still notify operators
+    await notifyNearbyOperators(emergencyId, data.location, data.type);
     
     return emergencyId;
   } catch (error) {
@@ -51,10 +55,11 @@ export const createEmergencyRequest = async (userId, data) => {
   }
 };
 
+
 // Notify nearby drone operators with improved notification content
 const notifyNearbyOperators = async (emergencyId, location, emergencyType) => {
   try {
-    // Get emergency details to include in notification
+    // Get emergency details
     const emergencyRef = doc(db, 'emergencies', emergencyId);
     const emergencySnap = await getDoc(emergencyRef);
     
@@ -110,17 +115,6 @@ const notifyNearbyOperators = async (emergencyId, location, emergencyType) => {
       });
       
       console.log(`Created notification for operator ${operator.id}`);
-      
-      // If the operator has a notification token, send a push notification
-      if (operator.notificationToken) {
-        try {
-          // This is a placeholder - in a real implementation, you would use Firebase Admin SDK
-          // or a server endpoint to send the actual push notification
-          console.log(`Would send push notification to token ${operator.notificationToken}`);
-        } catch (error) {
-          console.error('Error sending push notification:', error);
-        }
-      }
     }
     
     return nearbyOperators.length;

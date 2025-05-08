@@ -7,6 +7,16 @@ import { acceptEmergency, getOperatorAssignments, getSearchAssignmentById } from
 import { getCurrentLocation, calculateDistance } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
 import MapView from '../components/map/MapView';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  addDoc,
+  serverTimestamp,
+  GeoPoint
+} from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 const EmergencyDetails = () => {
   const { id } = useParams();
@@ -20,6 +30,7 @@ const EmergencyDetails = () => {
   const [userDistance, setUserDistance] = useState(null);
   const [hasActiveAssignments, setHasActiveAssignments] = useState(false);
   const [activeAssignmentId, setActiveAssignmentId] = useState(null);
+  const [searchAssignments, setSearchAssignments] = useState([]);
   
   useEffect(() => {
     const fetchEmergency = async () => {
@@ -68,6 +79,11 @@ const EmergencyDetails = () => {
             setUserDistance(distance);
           }
         }
+
+        // Fetch search assignments for this emergency
+        if (data) {
+          fetchSearchAssignments(id);
+        }
       } catch (error) {
         console.error('Error fetching emergency:', error);
         toast.error('Error loading emergency details');
@@ -87,6 +103,38 @@ const EmergencyDetails = () => {
     
     return () => unsubscribe();
   }, [id, currentUser, userProfile]);
+  
+  // Function to fetch search assignments
+  const fetchSearchAssignments = async (emergencyId) => {
+    try {
+      console.log("Fetching search assignments for emergency:", emergencyId);
+
+      // Use imported functions (no require statements)
+      const assignmentsRef = collection(db, 'searchAssignments');
+
+      const q = query(
+        assignmentsRef, 
+        where('emergencyId', '==', emergencyId),
+        where('status', '==', 'active')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const assignments = [];
+
+      querySnapshot.forEach((doc) => {
+        assignments.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+
+      console.log("Found assignments:", assignments.length, assignments);
+
+      setSearchAssignments(assignments);
+    } catch (error) {
+      console.error('Error fetching search assignments:', error);
+    }
+  };
   
   const handleAcceptEmergency = async () => {
     try {
@@ -196,6 +244,9 @@ const EmergencyDetails = () => {
     );
   }
 
+  console.log("Search Assignments:", searchAssignments);
+  console.log("Search Assignments Length:", searchAssignments ? searchAssignments.length : 0);
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
@@ -209,9 +260,10 @@ const EmergencyDetails = () => {
             <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full 
               ${emergency.status === 'active' ? 'bg-yellow-100 text-yellow-800' : 
                 emergency.status === 'in-progress' ? 'bg-blue-100 text-blue-800' : 
+                emergency.status === 'completed' ? 'bg-purple-100 text-purple-800' :
                 'bg-green-100 text-green-800'}`}
             >
-              {emergency.status}
+              {emergency.status === 'completed' ? 'Work Completed' : emergency.status}
             </span>
           </div>
         </div>
@@ -304,7 +356,60 @@ const EmergencyDetails = () => {
             </div>
           </div>
           
-          <div className="mt-8 flex justify-between items-center border-t border-gray-200 pt-6">
+          {/* Active Search Assignments Section */}
+          {searchAssignments.length > 0 && (
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <h3 className="text-lg font-semibold mb-4">Active Search Assignments</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Assignment ID
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {searchAssignments.map((assignment) => (
+                      <tr key={assignment.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {assignment.id.substring(0, 8)}...
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                            {assignment.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {assignment.createdAt ? new Date(assignment.createdAt.seconds * 1000).toLocaleString() : 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <Link
+                            to={`/search/${assignment.id}`}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            View Search Assignment
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          
+          <div className="mt-8 flex flex-wrap justify-center gap-4 border-t border-gray-200 pt-6">
+            {/* Accept Emergency Button (Only for eligible drone operators) */}
             {canAccept && (
               <button
                 onClick={handleAcceptEmergency}
@@ -315,8 +420,39 @@ const EmergencyDetails = () => {
               </button>
             )}
             
+            {/* View Assignment Button - ALWAYS show this if there are any assignments */}
+            {searchAssignments && searchAssignments.length > 0 && (
+              <Link
+                to={`/search/${searchAssignments[0].id}`}
+                className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
+              >
+                View Assignment
+              </Link>
+            )}
+            
+            {/* Show View My Assignment if user has an assignment for this emergency */}
+            {userAssignment && (
+              <Link
+                to={`/search/${userAssignment.id}`}
+                className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
+              >
+                View My Assignment
+              </Link>
+            )}
+            
+            {/* Mark as Resolved Button (Only for creator when work is completed or active) */}
+            {isCreator && (emergency.status === 'completed' || emergency.status === 'active') && (
+              <button
+                onClick={handleResolveEmergency}
+                className={`${emergency.status === 'completed' ? 'bg-green-500 hover:bg-green-700' : 'bg-gray-400 hover:bg-gray-500'} text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline`}
+              >
+                Mark as Resolved
+              </button>
+            )}
+            
+            {/* Warning message for operators with existing assignments */}
             {userProfile?.isDroneOperator && hasActiveAssignments && !userAssignment && (
-              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-yellow-800 max-w-md">
+              <div className="w-full mt-4 bg-yellow-50 border border-yellow-200 p-3 rounded text-yellow-800">
                 <p className="font-medium">You already have an active assignment</p>
                 <p className="text-sm mt-1">You can only accept one emergency at a time. Please complete your current assignment first.</p>
                 <Link 
@@ -326,24 +462,6 @@ const EmergencyDetails = () => {
                   Go to my active assignment →
                 </Link>
               </div>
-            )}
-            
-            {userAssignment && (
-              <Link
-                to={`/search/${userAssignment.id}`}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
-              >
-                View My Assignment
-              </Link>
-            )}
-            
-            {isCreator && emergency.status !== 'resolved' && (
-              <button
-                onClick={handleResolveEmergency}
-                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
-              >
-                Mark as Resolved
-              </button>
             )}
           </div>
         </div>

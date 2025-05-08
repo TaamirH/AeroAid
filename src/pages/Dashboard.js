@@ -2,17 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getUserEmergencies } from '../services/emergencyService';
 import { getOperatorAssignments, getSearchAssignmentById } from '../services/searchService';
 import { calculateDistance } from '../utils/geoUtils';
 import NotificationsList from '../components/notifications/NotificationsList';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { createTestNotification } from '../services/notificationService';
-import { forceNotifyAllOperators, createTestEmergencyForNotifications } from '../services/emergencyService';
 import { toast } from 'react-toastify';
 import EmergencyStats from '../components/dashboards/EmergencyStats';
 import { getDocs } from 'firebase/firestore';
+import { getUserEmergencies, forceNotifyAllOperators, createTestEmergencyForNotifications } from '../services/emergencyService';
+
 
 const Dashboard = () => {
   const { currentUser, userProfile } = useAuth();
@@ -109,7 +109,7 @@ const Dashboard = () => {
       nearbyUnsubscribe = onSnapshot(
         query(
           emergenciesRef,
-          where('status', 'in', ['active', 'in-progress']),
+          where('status', 'in', ['active', 'in-progress', 'completed']),  // Add 'completed'
           orderBy('createdAt', 'desc')
         ),
         (snapshot) => {
@@ -209,7 +209,7 @@ const Dashboard = () => {
       const emergenciesRef = collection(db, 'emergencies');
       const q = query(
         emergenciesRef, 
-        where('status', 'in', ['active', 'in-progress']),
+        where('status', 'in', ['active', 'in-progress', 'completed']),  // Add 'completed' 
         orderBy('createdAt', 'desc')
       );
       
@@ -458,9 +458,10 @@ const Dashboard = () => {
                                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                                       ${emergency.status === 'active' ? 'bg-yellow-100 text-yellow-800' : 
                                         emergency.status === 'in-progress' ? 'bg-blue-100 text-blue-800' : 
+                                        emergency.status === 'completed' ? 'bg-purple-100 text-purple-800' :
                                         'bg-green-100 text-green-800'}`}
                                     >
-                                      {emergency.status}
+                                      {emergency.status === 'completed' ? 'Work Completed' : emergency.status}
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -620,6 +621,7 @@ const Dashboard = () => {
                                     <span className={`w-3 h-3 rounded-full mr-2
                                       ${emergency.status === 'active' ? 'bg-yellow-500' : 
                                         emergency.status === 'in-progress' ? 'bg-blue-500' : 
+                                        emergency.status === 'completed' ? 'bg-purple-500' : 
                                         'bg-green-500'}`}
                                     ></span>
                                     <h3 className="font-bold text-lg text-gray-900">{emergency.type}</h3>
