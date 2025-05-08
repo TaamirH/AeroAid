@@ -17,6 +17,7 @@ import {
   GeoPoint
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { subscribeToFindings } from '../services/findingService';
 
 const EmergencyDetails = () => {
   const { id } = useParams();
@@ -31,6 +32,7 @@ const EmergencyDetails = () => {
   const [hasActiveAssignments, setHasActiveAssignments] = useState(false);
   const [activeAssignmentId, setActiveAssignmentId] = useState(null);
   const [searchAssignments, setSearchAssignments] = useState([]);
+  const [findings, setFindings] = useState([]);
   
   useEffect(() => {
     const fetchEmergency = async () => {
@@ -103,6 +105,24 @@ const EmergencyDetails = () => {
     
     return () => unsubscribe();
   }, [id, currentUser, userProfile]);
+  
+  useEffect(() => {
+    let unsubscribeFindings = null;
+    
+    // Subscribe to findings when emergency data is loaded
+    if (emergency) {
+      unsubscribeFindings = subscribeToFindings(emergency.id, (newFindings) => {
+        console.log('Received updated findings:', newFindings.length);
+        setFindings(newFindings);
+      });
+    }
+    
+    return () => {
+      if (unsubscribeFindings) {
+        unsubscribeFindings();
+      }
+    };
+  }, [emergency]);
   
   // Function to fetch search assignments
   const fetchSearchAssignments = async (emergencyId) => {
@@ -323,11 +343,11 @@ const EmergencyDetails = () => {
                 />
               </div>
               
-              {emergency.findings && emergency.findings.length > 0 && (
+              {findings && findings.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold mb-2">Reported Findings</h3>
                   <ul className="space-y-2">
-                    {emergency.findings.map((finding) => (
+                    {findings.map((finding) => (
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
                         
@@ -344,10 +364,12 @@ const EmergencyDetails = () => {
                         <p className="text-sm text-gray-600">
                           Reported by operator at {formatTimestamp(finding.timestamp)}
                         </p>
-                        <p className="text-sm text-gray-600">
-                          Location: Lat {finding.location?.latitude.toFixed(6)}, 
-                          Lng {finding.location?.longitude.toFixed(6)}
-                        </p>
+                        {finding.location && (
+                          <p className="text-sm text-gray-600">
+                            Location: Lat {finding.location.latitude.toFixed(6)}, 
+                            Lng {finding.location.longitude.toFixed(6)}
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>

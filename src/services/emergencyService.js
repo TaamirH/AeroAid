@@ -124,7 +124,7 @@ const notifyNearbyOperators = async (emergencyId, location, emergencyType) => {
   }
 };
 
-// Get emergency request by ID
+// Get emergency request by ID and fetch related findings
 export const getEmergencyById = async (id) => {
   try {
     const docRef = doc(db, 'emergencies', id);
@@ -133,22 +133,48 @@ export const getEmergencyById = async (id) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
       
-      // Process the data
+      // Process the emergency data
       const processedData = {
         id: docSnap.id,
         ...data,
         createdAt: data.createdAt?.toDate(),
         updatedAt: data.updatedAt?.toDate(),
-        resolvedAt: data.resolvedAt?.toDate()
+        resolvedAt: data.resolvedAt?.toDate(),
+        findings: [] // Initialize empty findings array
       };
       
-      // Ensure findings data structure is maintained
-      if (Array.isArray(processedData.findings)) {
-        processedData.findings.forEach(finding => {
-          // Make sure imageBase64 is preserved if it exists
-          if (finding.imageBase64) {
-            finding.imageBase64 = finding.imageBase64;
-          }
+      // Fetch finding documents if findingIds exists
+      if (data.findingIds && data.findingIds.length > 0) {
+        const findingsCollection = collection(db, 'findings');
+        
+        // Use Promise.all to fetch all findings in parallel
+        const findingPromises = data.findingIds.map(findingId => {
+          const findingRef = doc(findingsCollection, findingId);
+          return getDoc(findingRef).then(findingSnap => {
+            if (findingSnap.exists()) {
+              const findingData = findingSnap.data();
+              return {
+                id: findingSnap.id,
+                ...findingData,
+                timestamp: findingData.timestamp?.toDate()
+              };
+            }
+            return null;
+          });
+        });
+        
+        // Wait for all finding documents to be fetched
+        const findings = await Promise.all(findingPromises);
+        
+        // Filter out any null values (in case some findings were deleted)
+        processedData.findings = findings.filter(finding => finding !== null);
+        
+        // Sort findings by timestamp (newest first)
+        processedData.findings.sort((a, b) => {
+          // Handle missing timestamps
+          if (!a.timestamp) return 1;
+          if (!b.timestamp) return -1;
+          return b.timestamp - a.timestamp;
         });
       }
       
@@ -162,23 +188,93 @@ export const getEmergencyById = async (id) => {
   }
 };
 
-// Subscribe to emergency updates
+// Subscribe to emergency updates with real-time findings updates
 export const subscribeToEmergency = (id, callback) => {
-  const docRef = doc(db, 'emergencies', id);
+  // Subscribe to changes in the emergency document
+  const emergencyRef = doc(db, 'emergencies', id);
   
-  return onSnapshot(docRef, (doc) => {
+  // Main emergency document listener
+  const unsubscribeEmergency = onSnapshot(emergencyRef, async (doc) => {
     if (doc.exists()) {
-      callback({
+      const data = doc.data();
+      
+      // Process emergency data
+      const processedData = {
         id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate(),
-        resolvedAt: doc.data().resolvedAt?.toDate()
-      });
+        ...data,
+        createdAt: data.createdAt?.toDate(),
+        updatedAt: data.updatedAt?.toDate(),
+        resolvedAt: data.resolvedAt?.toDate(),
+        findings: [] // Initialize empty findings array
+      };
+      
+      try {
+        // Fetch findings if findingIds exists
+        if (data.findingIds && data.findingIds.length > 0) {
+          const findingsCollection = collection(db, 'findings');
+          
+          // Use Promise.all to fetch all findings in parallel
+          const findingPromises = data.findingIds.map(findingId => {
+            const findingRef = doc(findingsCollection, findingId);
+            return getDoc(findingRef).then(findingSnap => {
+              if (findingSnap.exists()) {
+                const findingData = findingSnap.data();
+                return {
+                  id: findingSnap.id,
+                  ...findingData,
+                  timestamp: findingData.timestamp?.toDate()
+                };
+              }
+              return null;
+            });
+          });
+          
+          // Wait for all finding documents to be fetched
+          const findings = await Promise.all(findingPromises);
+          
+          // Filter out any null values (in case some findings were deleted)
+          processedData.findings = findings.filter(finding => finding !== null);
+          
+          // Sort findings by timestamp (newest first)
+          processedData.findings.sort((a, b) => {
+            // Handle missing timestamps
+            if (!a.timestamp) return 1;
+            if (!b.timestamp) return -1;
+            return b.timestamp - a.timestamp;
+          });
+        }
+        
+        // Call the callback with the processed data
+        callback(processedData);
+      } catch (error) {
+        console.error('Error fetching findings:', error);
+        // Still call callback with whatever data we have
+        callback(processedData);
+      }
     } else {
       callback(null);
     }
   });
+  
+  // Also listen for changes to the findings collection for this emergency
+  const findingsQuery = query(
+    collection(db, 'findings'),
+    where('emergencyId', '==', id)
+  );
+  
+  // This is just a trigger to update the emergency when findings change
+  // We don't use the data directly because the main emergency listener already fetches it
+  const unsubscribeFindings = onSnapshot(findingsQuery, () => {
+    // When a finding changes, we don't need to do anything
+    // because the main emergency listener will be triggered due to the updatedAt field
+    console.log('Finding collection changed for emergency:', id);
+  });
+  
+  // Return a function to unsubscribe both listeners
+  return () => {
+    unsubscribeEmergency();
+    unsubscribeFindings();
+  };
 };
 
 // Get user's emergency requests
@@ -227,46 +323,56 @@ export const updateEmergencyStatus = async (id, status) => {
   }
 };
 
-// Add finding to emergency
+// Add finding to emergency - now creates a separate document in the findings collection
 export const addFindingToEmergency = async (emergencyId, finding) => {
   try {
     console.log('Adding finding to emergency:', emergencyId);
-    const docRef = doc(db, 'emergencies', emergencyId);
-    const docSnap = await getDoc(docRef);
     
-    if (docSnap.exists()) {
-      const emergencyData = docSnap.data();
-      const findings = Array.isArray(emergencyData.findings) ? emergencyData.findings : [];
-      
-      // Create a new finding with ID
-      const newFinding = {
-        id: Date.now().toString(),
-        ...finding,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log('New finding data being added:', newFinding);
-      
-      // Add the new finding to the findings array
-      findings.push(newFinding);
-      
-      // Update the emergency document with the new findings array
-      await updateDoc(docRef, {
-        findings,
-        updatedAt: serverTimestamp()
-      });
-      
-      console.log('Finding added successfully');
-      return newFinding.id;
-    } else {
+    // 1. Create a new document in the findings collection
+    const findingData = {
+      emergencyId,
+      description: finding.description,
+      operatorId: finding.operatorId,
+      location: finding.location ? {
+        latitude: finding.location.latitude,
+        longitude: finding.location.longitude
+      } : null,
+      timestamp: serverTimestamp(),
+      // Only include imageBase64 if it exists
+      ...(finding.imageBase64 && { imageBase64: finding.imageBase64 })
+    };
+    
+    const findingsCollection = collection(db, 'findings');
+    const findingDocRef = await addDoc(findingsCollection, findingData);
+    const findingId = findingDocRef.id;
+    
+    console.log('Created finding document with ID:', findingId);
+    
+    // 2. Update the emergency document to add the finding ID to its findingIds array
+    const emergencyRef = doc(db, 'emergencies', emergencyId);
+    const emergencySnap = await getDoc(emergencyRef);
+    
+    if (!emergencySnap.exists()) {
       throw new Error('Emergency not found');
     }
+    
+    // Get current findingIds array or initialize it if it doesn't exist
+    const emergencyData = emergencySnap.data();
+    const currentFindingIds = emergencyData.findingIds || [];
+    
+    // Add the new finding ID to the array
+    await updateDoc(emergencyRef, {
+      findingIds: [...currentFindingIds, findingId],
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('Updated emergency with new finding ID');
+    return findingId;
   } catch (error) {
     console.error('Error adding finding:', error);
     throw error;
   }
 };
-
 
 export const createTestEmergencyForNotifications = async (creatorId, location, notify = true) => {
   try {

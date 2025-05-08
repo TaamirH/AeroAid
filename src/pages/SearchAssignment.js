@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getSearchAssignmentById, subscribeToSearchAssignment, updateDroneLocation, completeSearchAssignment } from '../services/searchService';
-import { getEmergencyById, addFindingToEmergency } from '../services/emergencyService';
+import { getEmergencyById } from '../services/emergencyService';
 import { getCurrentLocation } from '../utils/geoUtils';
 import { toast } from 'react-toastify';
 import MapView from '../components/map/MapView';
@@ -13,6 +13,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../services/firebase';
 import WeatherWidget from '../components/weather/WeatherWidget';
 import ChatWindow from '../components/chat/ChatWindow';
+import { addFinding, subscribeToFindings } from '../services/findingService';
 
 const SearchAssignment = () => {
   const { id } = useParams();
@@ -48,6 +49,9 @@ const SearchAssignment = () => {
 
   // Add this state at the top of your component
   const [selectedImage, setSelectedImage] = useState(null);
+
+  // Add state for findings
+  const [findings, setFindings] = useState([]);
 
   // Function to close the modal
   const closeModal = () => setSelectedImage(null);
@@ -121,87 +125,104 @@ const SearchAssignment = () => {
       stopLocationTracking();
     };
   }, [id]);
+
+  // Add useEffect to subscribe to findings
+  useEffect(() => {
+    let unsubscribeFindings = null;
+    
+    // Subscribe to findings when emergency data is loaded
+    if (emergency) {
+      unsubscribeFindings = subscribeToFindings(emergency.id, (newFindings) => {
+        console.log('Received updated findings:', newFindings.length);
+        setFindings(newFindings);
+      });
+    }
+    
+    return () => {
+      if (unsubscribeFindings) {
+        unsubscribeFindings();
+      }
+    };
+  }, [emergency]);
   
   // Enhanced location update function
-// Update the updateLocation function with better null checks:
-
-const updateLocation = async (manualLocation = null) => {
-  try {
-    setLocationError(null);
-    let location;
-    
-    if (manualLocation) {
-      location = manualLocation;
-    } else {
-      try {
-        console.log('Attempting to get current location...');
-        location = await getCurrentLocation();
-        console.log('Successfully got location:', location);
-      } catch (geoError) {
-        console.error('Browser geolocation failed:', geoError);
-        
-        // First try to use existing drone location as fallback
-        if (assignment && assignment.droneLocation) {
-          console.log('Using current drone location as fallback');
-          location = {
-            latitude: assignment.droneLocation.latitude,
-            longitude: assignment.droneLocation.longitude
-          };
-        } 
-        // Then try to use user's profile location as fallback
-        else if (userProfile && userProfile.location) {
-          console.log('Using user profile location as fallback');
-          location = {
-            latitude: userProfile.location.latitude,
-            longitude: userProfile.location.longitude
-          };
+  const updateLocation = async (manualLocation = null) => {
+    try {
+      setLocationError(null);
+      let location;
+      
+      if (manualLocation) {
+        location = manualLocation;
+      } else {
+        try {
+          console.log('Attempting to get current location...');
+          location = await getCurrentLocation();
+          console.log('Successfully got location:', location);
+        } catch (geoError) {
+          console.error('Browser geolocation failed:', geoError);
           
-          if (!locationTrackingRef.current) {
-            toast.info('Using profile location as fallback');
+          // First try to use existing drone location as fallback
+          if (assignment && assignment.droneLocation) {
+            console.log('Using current drone location as fallback');
+            location = {
+              latitude: assignment.droneLocation.latitude,
+              longitude: assignment.droneLocation.longitude
+            };
+          } 
+          // Then try to use user's profile location as fallback
+          else if (userProfile && userProfile.location) {
+            console.log('Using user profile location as fallback');
+            location = {
+              latitude: userProfile.location.latitude,
+              longitude: userProfile.location.longitude
+            };
+            
+            if (!locationTrackingRef.current) {
+              toast.info('Using profile location as fallback');
+            }
+          } else {
+            // No fallbacks available
+            setLocationError('Location access denied and no fallback location available.');
+            return false;
           }
-        } else {
-          // No fallbacks available
-          setLocationError('Location access denied and no fallback location available.');
-          return false;
         }
       }
-    }
-    
-    // Rest of your function remains the same...
-    // Skip update if location hasn't changed significantly
-    if (assignment && assignment.droneLocation && !manualLocation) {
-      const currentLat = assignment.droneLocation.latitude;
-      const currentLng = assignment.droneLocation.longitude;
-      const newLat = location.latitude;
-      const newLng = location.longitude;
       
-      // If location is almost the same, don't update
-      const threshold = 0.0001;
-      if (
-        Math.abs(currentLat - newLat) < threshold && 
-        Math.abs(currentLng - newLng) < threshold
-      ) {
-        console.log('Location hasn\'t changed significantly, skipping update');
-        return true;
+      // Rest of your function remains the same...
+      // Skip update if location hasn't changed significantly
+      if (assignment && assignment.droneLocation && !manualLocation) {
+        const currentLat = assignment.droneLocation.latitude;
+        const currentLng = assignment.droneLocation.longitude;
+        const newLat = location.latitude;
+        const newLng = location.longitude;
+        
+        // If location is almost the same, don't update
+        const threshold = 0.0001;
+        if (
+          Math.abs(currentLat - newLat) < threshold && 
+          Math.abs(currentLng - newLng) < threshold
+        ) {
+          console.log('Location hasn\'t changed significantly, skipping update');
+          return true;
+        }
       }
+      
+      // Update drone location in database
+      console.log('Updating drone location to:', location);
+      await updateDroneLocation(id, location);
+      
+      // Only show toast for manual updates
+      if (!locationTrackingRef.current) {
+        toast.success('Drone location updated');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating location:', error);
+      setLocationError(error.message);
+      return false;
     }
-    
-    // Update drone location in database
-    console.log('Updating drone location to:', location);
-    await updateDroneLocation(id, location);
-    
-    // Only show toast for manual updates
-    if (!locationTrackingRef.current) {
-      toast.success('Drone location updated');
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('Error updating location:', error);
-    setLocationError(error.message);
-    return false;
-  }
-};
+  };
   
   // Manual coordinates handler
   const handleManualCoordinateChange = (e) => {
@@ -304,8 +325,7 @@ const updateLocation = async (manualLocation = null) => {
     }
   };
   
-// In handleSubmitFinding function, modify the try/catch block:
-
+// Replace handleSubmitFinding function
 const handleSubmitFinding = async (e) => {
   e.preventDefault();
 
@@ -326,7 +346,6 @@ const handleSubmitFinding = async (e) => {
       description: findingForm.description,
       operatorId: currentUser.uid,
       location: findingLocation,
-      timestamp: new Date().toISOString(),
     };
 
     // Add the image as Base64 if available
@@ -334,12 +353,8 @@ const handleSubmitFinding = async (e) => {
       findingData.imageBase64 = imagePreview;
     }
 
-    // Add finding to emergency
-    await addFindingToEmergency(emergency.id, findingData);
-
-    // Fetch updated emergency data
-    const updatedEmergency = await getEmergencyById(emergency.id);
-    setEmergency(updatedEmergency); // Update the state with the latest data
+    // Use the new addFinding function
+    await addFinding(emergency.id, findingData);
 
     // Reset form
     setFindingForm({ description: '', location: null });
@@ -778,7 +793,7 @@ const handleSubmitFinding = async (e) => {
                     east: assignment.searchArea.east,
                     west: assignment.searchArea.west
                   }}
-                  findings={emergency?.findings?.map(f => ({
+                  findings={findings.map(f => ({
                     position: {
                       lat: f.location.latitude,
                       lng: f.location.longitude
@@ -800,11 +815,11 @@ const handleSubmitFinding = async (e) => {
               )}
 
               {/* Update the "Recent Findings" section to make images clickable */}
-              {emergency?.findings && emergency.findings.length > 0 && (
+              {findings && findings.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-lg font-semibold mb-2">Recent Findings</h3>
                   <ul className="space-y-2 max-h-60 overflow-y-auto">
-                    {emergency.findings.map((finding) => (
+                    {findings.map((finding) => (
                       <li key={finding.id} className="bg-blue-50 p-3 rounded">
                         <p className="font-medium">{finding.description}</p>
                         
@@ -823,6 +838,12 @@ const handleSubmitFinding = async (e) => {
                         <p className="text-sm text-gray-600">
                           Reported at {formatTimestamp(finding.timestamp)}
                         </p>
+                        {finding.location && (
+                          <p className="text-sm text-gray-600">
+                            Location: Lat {finding.location.latitude.toFixed(6)}, 
+                            Lng {finding.location.longitude.toFixed(6)}
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>
