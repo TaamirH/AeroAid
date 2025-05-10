@@ -44,8 +44,8 @@ export function AuthProvider({ children }) {
       );
       await updateProfile(userCredential.user, { displayName });
 
-      // Create user profile in Firestore
-      await setDoc(doc(db, "users", userCredential.user.uid), {
+      // Create user profile data
+      const profileData = {
         displayName,
         email,
         isDroneOperator,
@@ -53,9 +53,15 @@ export function AuthProvider({ children }) {
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         notificationToken: null,
-      });
+      };
 
-      // If user is a drone operator and has location, notify about nearby emergencies
+      // Create user profile in Firestore
+      await setDoc(doc(db, "users", userCredential.user.uid), profileData);
+
+      // Explicitly set the userProfile state to ensure it's updated
+      setUserProfile(profileData);
+
+      // Notify about nearby emergencies
       if (isDroneOperator && location) {
         // Do this asynchronously - don't await
         notifyOperatorOfNearbyEmergencies(userCredential.user.uid, location)
@@ -83,29 +89,25 @@ export function AuthProvider({ children }) {
         password
       );
 
-      // After successful login, check if user is a drone operator and has location
-      const userRef = doc(db, "users", userCredential.user.uid);
-      const userSnap = await getDoc(userRef);
+      // After successful login, immediately load user profile
+      const profile = await fetchUserProfile(userCredential.user.uid);
 
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
+      // Explicitly set the userProfile state to ensure it's updated
+      setUserProfile(profile);
 
-        // If user is a drone operator and has location, notify about nearby emergencies
-        if (userData.isDroneOperator && userData.location) {
-          // Do this asynchronously - don't await
-          notifyOperatorOfNearbyEmergencies(
-            userCredential.user.uid,
-            userData.location
-          )
-            .then((result) => {
-              console.log(
-                `Notified user of ${result.count} nearby emergencies`
-              );
-            })
-            .catch((error) => {
-              console.error("Error notifying about nearby emergencies:", error);
-            });
-        }
+      // Check for nearby emergencies
+      if (profile.isDroneOperator && profile.location) {
+        // Do this asynchronously - don't await
+        notifyOperatorOfNearbyEmergencies(
+          userCredential.user.uid,
+          profile.location
+        )
+          .then((result) => {
+            console.log(`Notified user of ${result.count} nearby emergencies`);
+          })
+          .catch((error) => {
+            console.error("Error notifying about nearby emergencies:", error);
+          });
       }
 
       return userCredential;
@@ -222,12 +224,25 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed, user:", user?.uid);
       setCurrentUser(user);
+
       if (user) {
-        await fetchUserProfile(user.uid);
+        try {
+          // Force synchronous loading of user profile
+          const profile = await fetchUserProfile(user.uid);
+          console.log("User profile loaded:", profile);
+
+          // Explicitly set the userProfile state to ensure it's updated
+          setUserProfile(profile);
+        } catch (error) {
+          console.error("Error loading user profile:", error);
+          setUserProfile(null);
+        }
       } else {
         setUserProfile(null);
       }
+
       setLoading(false);
     });
 

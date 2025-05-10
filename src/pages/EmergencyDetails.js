@@ -266,6 +266,38 @@ const EmergencyDetails = () => {
     }
   };
 
+  useEffect(() => {
+    // Debug log to check user profile
+    console.log("Current userProfile in EmergencyDetails:", userProfile);
+    console.log("isDroneOperator value:", userProfile?.isDroneOperator);
+  }, [userProfile]);
+
+  const canAccept = () => {
+    // Convert the conditional to a function for better debugging
+    const isDroneOp = Boolean(userProfile?.isDroneOperator);
+    const noCurrentAssignment = !userAssignment;
+    const noActiveAssignments = !hasActiveAssignments;
+    const notResolved = emergency?.status !== "resolved";
+    const withinRange = userDistance === null || userDistance <= 3;
+
+    console.log("canAccept conditions:", {
+      isDroneOp,
+      noCurrentAssignment,
+      noActiveAssignments,
+      notResolved,
+      withinRange,
+      userProfile,
+    });
+
+    return (
+      isDroneOp &&
+      noCurrentAssignment &&
+      noActiveAssignments &&
+      notResolved &&
+      withinRange
+    );
+  };
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -292,12 +324,6 @@ const EmergencyDetails = () => {
   }
 
   const isCreator = currentUser.uid === emergency.userId;
-  const canAccept =
-    userProfile?.isDroneOperator &&
-    !userAssignment &&
-    !hasActiveAssignments &&
-    emergency.status !== "resolved" &&
-    (userDistance === null || userDistance <= 3);
 
   const canView = !!currentUser;
 
@@ -528,7 +554,7 @@ const EmergencyDetails = () => {
 
           <div className="mt-8 flex flex-wrap justify-center gap-4 border-t border-gray-200 pt-6">
             {/* Accept Emergency Button (Only for eligible drone operators) */}
-            {canAccept && (
+            {canAccept() && (
               <button
                 onClick={handleAcceptEmergency}
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
