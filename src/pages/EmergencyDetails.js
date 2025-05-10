@@ -1,5 +1,5 @@
 // src/pages/EmergencyDetails.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -42,6 +42,8 @@ const EmergencyDetails = () => {
   const [searchAssignments, setSearchAssignments] = useState([]);
   const [findings, setFindings] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [highlightedFindingId, setHighlightedFindingId] = useState(null);
+  const mapRef = useRef(null);
 
   useEffect(() => {
     const fetchEmergency = async () => {
@@ -298,6 +300,34 @@ const EmergencyDetails = () => {
     );
   };
 
+  // Add this handler function for when a finding pin is clicked on the map
+  const handleFindingPinClick = (findingId) => {
+    setHighlightedFindingId(findingId);
+
+    // Find and scroll to the corresponding finding in the list
+    const findingElement = document.getElementById(`finding-${findingId}`);
+    if (findingElement) {
+      findingElement.scrollIntoView({ behavior: "smooth" });
+
+      // Add a temporary highlight class
+      findingElement.classList.add("bg-yellow-100");
+      setTimeout(() => {
+        findingElement.classList.remove("bg-yellow-100");
+        findingElement.classList.add("bg-blue-50");
+      }, 2000);
+    }
+  };
+
+  // Add this handler function for when a finding is clicked in the list
+  const handleFindingClick = (findingId) => {
+    setHighlightedFindingId(findingId);
+
+    // Highlight the pin on the map
+    if (mapRef.current) {
+      mapRef.current.highlightFindingPin(findingId);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -421,6 +451,7 @@ const EmergencyDetails = () => {
               <h3 className="text-lg font-semibold mb-2">Location Map</h3>
               <div className="h-64 bg-gray-200 rounded">
                 <MapView
+                  ref={mapRef}
                   center={{
                     lat: emergency.location.latitude,
                     lng: emergency.location.longitude,
@@ -435,6 +466,18 @@ const EmergencyDetails = () => {
                       title: "Emergency Location",
                     },
                   ]}
+                  findings={findings.map((f) => ({
+                    id: f.id,
+                    position: {
+                      lat: f.location?.latitude,
+                      lng: f.location?.longitude,
+                    },
+                    title:
+                      f.description.substring(0, 50) +
+                      (f.description.length > 50 ? "..." : ""),
+                    highlighted: f.id === highlightedFindingId,
+                  }))}
+                  onFindingPinClick={handleFindingPinClick}
                 />
               </div>
 
@@ -446,7 +489,21 @@ const EmergencyDetails = () => {
                   <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg p-2">
                     <ul className="space-y-2">
                       {findings.map((finding) => (
-                        <li key={finding.id} className="bg-blue-50 p-3 rounded">
+                        <li
+                          key={finding.id}
+                          id={`finding-${finding.id}`}
+                          className={`p-3 rounded transition-colors duration-300 ${
+                            finding.id === highlightedFindingId
+                              ? "bg-yellow-100"
+                              : "bg-blue-50"
+                          }`}
+                          onClick={() =>
+                            finding.location && handleFindingClick(finding.id)
+                          }
+                          style={{
+                            cursor: finding.location ? "pointer" : "default",
+                          }}
+                        >
                           <p className="font-medium">{finding.description}</p>
 
                           {finding.imageBase64 && (
@@ -455,9 +512,10 @@ const EmergencyDetails = () => {
                                 src={finding.imageBase64}
                                 alt="Finding evidence"
                                 className="max-h-60 w-auto rounded border border-gray-300 cursor-pointer"
-                                onClick={() =>
-                                  setSelectedImage(finding.imageBase64)
-                                }
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent triggering the parent click
+                                  setSelectedImage(finding.imageBase64);
+                                }}
                               />
                             </div>
                           )}
@@ -466,12 +524,41 @@ const EmergencyDetails = () => {
                             Reported by operator at{" "}
                             {formatTimestamp(finding.timestamp)}
                           </p>
+
                           {finding.location && (
-                            <p className="text-sm text-gray-600">
-                              Location: Lat{" "}
-                              {finding.location.latitude.toFixed(6)}, Lng{" "}
-                              {finding.location.longitude.toFixed(6)}
-                            </p>
+                            <div className="flex items-center mt-1">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4 text-gray-500 mr-1"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                              </svg>
+                              <p className="text-sm text-gray-600">
+                                Location: Lat{" "}
+                                {finding.location.latitude.toFixed(6)}, Lng{" "}
+                                {finding.location.longitude.toFixed(6)}
+                              </p>
+                            </div>
+                          )}
+
+                          {finding.location && (
+                            <div className="mt-1 text-xs text-blue-600">
+                              Click to view on map
+                            </div>
                           )}
                         </li>
                       ))}

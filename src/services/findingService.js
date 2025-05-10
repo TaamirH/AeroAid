@@ -46,6 +46,11 @@ export const getFindingsForEmergency = async (emergencyId) => {
 
 // Listen for realtime updates to findings for a specific emergency
 export const subscribeToFindings = (emergencyId, callback) => {
+  console.log(
+    "Setting up subscription to findings for emergency:",
+    emergencyId
+  );
+
   const findingsQuery = query(
     collection(db, "findings"),
     where("emergencyId", "==", emergencyId),
@@ -59,17 +64,35 @@ export const subscribeToFindings = (emergencyId, callback) => {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
+
+        // Debug each finding data
+        console.log("Raw finding data from Firestore:", {
+          id: doc.id,
+          ...data,
+          hasLocation: !!data.location,
+          locationDetails: data.location
+            ? `lat: ${data.location.latitude}, lng: ${data.location.longitude}`
+            : "No location",
+        });
+
         findings.push({
           id: doc.id,
           ...data,
           // Convert the timestamp properly
-          timestamp: data.timestamp
-            ? data.timestamp.toDate
-              ? data.timestamp.toDate()
-              : new Date(data.timestamp)
-            : new Date(),
+          timestamp:
+            data.timestamp?.toDate?.() ??
+            new Date(data.timestamp) ??
+            new Date(),
         });
       });
+
+      console.log(
+        `Processed ${findings.length} findings for emergency ${emergencyId}`
+      );
+      console.log(
+        "Findings with location:",
+        findings.filter((f) => f.location).length
+      );
 
       callback(findings);
     },
@@ -82,21 +105,31 @@ export const subscribeToFindings = (emergencyId, callback) => {
 // Add a new finding
 export const addFinding = async (emergencyId, finding) => {
   try {
+    console.log("Adding finding with data:", finding);
+
+    // Make sure location is properly structured
+    let locationData = null;
+    if (finding.location) {
+      // Ensure location has latitude and longitude as numbers
+      locationData = {
+        latitude: Number(finding.location.latitude),
+        longitude: Number(finding.location.longitude),
+      };
+      console.log("Structured location data:", locationData);
+    }
+
     // Create the finding document
     const findingData = {
       emergencyId,
       description: finding.description,
       operatorId: finding.operatorId,
-      location: finding.location
-        ? {
-            latitude: finding.location.latitude,
-            longitude: finding.location.longitude,
-          }
-        : null,
+      location: locationData, // Use the properly structured location
       timestamp: serverTimestamp(), // Always use serverTimestamp
       // Only include imageBase64 if it exists
       ...(finding.imageBase64 && { imageBase64: finding.imageBase64 }),
     };
+
+    console.log("Final finding data being saved:", findingData);
 
     // Add to findings collection
     const findingRef = await addDoc(collection(db, "findings"), findingData);
