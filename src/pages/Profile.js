@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { getCurrentLocation } from '../utils/geoUtils';
 import { requestNotificationPermission } from '../services/firebase';
+import { notifyOperatorOfNearbyEmergencies } from '../services/notificationService';
 import AddressAutocomplete from '../components/location/AddressAutocomplete';
 
 const Profile = () => {
@@ -79,8 +80,11 @@ const Profile = () => {
     try {
       setLoading(true);
       
+      // Check if user is becoming a drone operator
+      const becomingOperator = formData.isDroneOperator && !userProfile.isDroneOperator;
+      
       // If becoming a drone operator, request notification permission
-      if (formData.isDroneOperator && !userProfile.isDroneOperator) {
+      if (becomingOperator) {
         const token = await requestNotificationPermission();
         if (token) {
           await updateUserProfile(currentUser.uid, {
@@ -91,7 +95,20 @@ const Profile = () => {
           await updateUserProfile(currentUser.uid, formData);
           toast.warning('Notifications are disabled. You may miss emergency alerts.');
         }
+        
+        // Notify the new operator about nearby emergencies if they have a location
+        if (formData.location) {
+          try {
+            const result = await notifyOperatorOfNearbyEmergencies(currentUser.uid, formData.location);
+            if (result.success && result.count > 0) {
+              toast.info(`You have ${result.count} nearby emergency requests!`);
+            }
+          } catch (notifyError) {
+            console.error('Error notifying about nearby emergencies:', notifyError);
+          }
+        }
       } else {
+        // Regular profile update
         await updateUserProfile(currentUser.uid, formData);
       }
       

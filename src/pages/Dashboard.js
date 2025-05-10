@@ -7,7 +7,7 @@ import { calculateDistance } from '../utils/geoUtils';
 import NotificationsList from '../components/notifications/NotificationsList';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { createTestNotification } from '../services/notificationService';
+import { createTestNotification, notifyOperatorOfNearbyEmergencies } from '../services/notificationService';
 import { toast } from 'react-toastify';
 import EmergencyStats from '../components/dashboards/EmergencyStats';
 import { getDocs } from 'firebase/firestore';
@@ -21,6 +21,38 @@ const Dashboard = () => {
   const [nearbyEmergencies, setNearbyEmergencies] = useState([]);
   const [activeTab, setActiveTab] = useState('emergencies');
   const [loading, setLoading] = useState(true);
+
+  // Add this function to the Dashboard component
+  const checkForNearbyEmergencies = async () => {
+    // Only run for drone operators with location
+    if (!userProfile?.isDroneOperator || !userProfile?.location) return;
+    
+    try {
+      // Check if there are any unread emergency notifications already
+      const notificationsRef = collection(db, 'notifications');
+      const q = query(
+        notificationsRef,
+        where('userId', '==', currentUser.uid),
+        where('read', '==', false)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      // If there are already unread notifications, don't create more
+      if (!querySnapshot.empty) {
+        console.log('User already has unread notifications, skipping check for nearby emergencies');
+        return;
+      }
+      
+      // Notify about nearby emergencies
+      const result = await notifyOperatorOfNearbyEmergencies(currentUser.uid, userProfile.location);
+      if (result.success && result.count > 0) {
+        toast.info(`Found ${result.count} nearby emergency requests!`);
+      }
+    } catch (error) {
+      console.error('Error checking for nearby emergencies:', error);
+    }
+  };
 
   useEffect(() => {
     // Initial data loading function
@@ -55,6 +87,9 @@ const Dashboard = () => {
             // Fetch active emergencies near the operator
             await fetchNearbyEmergencies();
           }
+          
+          // After all other data is loaded, check for nearby emergencies
+          await checkForNearbyEmergencies();
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
