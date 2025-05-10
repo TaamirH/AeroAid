@@ -150,11 +150,12 @@ export const notifyOperatorOfNearbyEmergencies = async (
       return { success: false, count: 0 };
     }
 
-    // Get all active emergencies
+    // Get all active emergencies that don't have an assigned operator
     const emergenciesRef = collection(db, "emergencies");
     const q = query(
       emergenciesRef,
-      where("status", "in", ["active", "in-progress"])
+      where("status", "in", ["active", "in-progress"]),
+      where("operatorId", "==", null) // Only get emergencies without an operator
     );
 
     const emergencySnapshot = await getDocs(q);
@@ -187,7 +188,7 @@ export const notifyOperatorOfNearbyEmergencies = async (
     });
 
     console.log(
-      `Found ${nearbyEmergencies.length} nearby emergencies for operator ${operatorId}`
+      `Found ${nearbyEmergencies.length} nearby unassigned emergencies for operator ${operatorId}`
     );
 
     // Create notifications for each nearby emergency

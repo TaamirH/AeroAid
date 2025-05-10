@@ -22,7 +22,7 @@ import { addFinding, subscribeToFindings } from "../services/findingService";
 
 const SearchAssignment = () => {
   const { id } = useParams();
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, fetchUserProfile } = useAuth();
   const navigate = useNavigate();
 
   const [assignment, setAssignment] = useState(null);
@@ -497,7 +497,16 @@ const SearchAssignment = () => {
 
         toast.success("Assignment completed successfully!");
 
-        // Use a setTimeout to give the toast time to show before navigation
+        // Force refresh the user profile to ensure it's updated
+        if (currentUser) {
+          try {
+            await fetchUserProfile(currentUser.uid);
+          } catch (profileError) {
+            console.error("Error refreshing user profile:", profileError);
+          }
+        }
+
+        // Navigate after a short delay to allow the toast to show
         setTimeout(() => {
           navigate("/dashboard");
         }, 1500);
