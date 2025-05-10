@@ -19,8 +19,8 @@ import { toast } from "react-toastify";
 const NotificationsList = ({ userId }) => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false); // New state to track refresh status
 
   // Function to fetch notifications
   const fetchNotifications = async () => {
@@ -31,7 +31,7 @@ const NotificationsList = ({ userId }) => {
     }
 
     try {
-      setRefreshing(true); // Set refreshing state
+      setRefreshing(true);
       setError(null);
       console.log("Fetching notifications for user:", userId);
 
@@ -105,13 +105,18 @@ const NotificationsList = ({ userId }) => {
       }
 
       setNotifications(notificationsList);
-      toast.success("Notifications refreshed");
+      if (refreshing) {
+        toast.success("Notifications refreshed");
+      }
     } catch (err) {
       console.error("Error fetching notifications:", err);
       setError(err.message || "Failed to load notifications");
-      toast.error("Failed to refresh notifications");
+      if (refreshing) {
+        toast.error("Failed to refresh notifications");
+      }
     } finally {
-      setRefreshing(false); // Reset refreshing state
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -228,80 +233,49 @@ const NotificationsList = ({ userId }) => {
     fetchNotifications(); // Call our fetch function
   };
 
-  if (loading && !refreshing) {
-    // Don't show loading indicator during refresh
-    return (
-      <div className="p-4 text-center">
-        <p>Loading notifications...</p>
-        <div className="text-xs text-gray-500 mt-2">
-          User ID: {userId || "not set"}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-red-500">{error}</p>
-        <div className="mt-4 p-2 bg-gray-100 rounded text-left text-xs">
-          <p className="font-bold mb-1">Debug Info:</p>
-          <p>User ID: {userId}</p>
-          <p>Error: {error}</p>
-          <p>Time: {new Date().toLocaleString()}</p>
-        </div>
-      </div>
-    );
-  }
+  // Get the count of unread notifications
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="bg-blue-50 border-b border-blue-100 px-4 py-3 flex justify-between items-center">
-        <h3 className="font-bold text-lg">
+      {/* Single blue header with bell icon and refresh button */}
+      <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center">
+        <h2 className="font-bold text-lg flex items-center">
+          <svg
+            className="h-5 w-5 mr-2"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
           Notifications
-          {notifications.filter((n) => !n.read).length > 0 && (
+          {unreadCount > 0 && (
             <span className="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-              {notifications.filter((n) => !n.read).length}
+              {unreadCount}
             </span>
           )}
-        </h3>
+        </h2>
         <button
           onClick={handleRefresh}
-          className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none"
+          className="text-sm text-white hover:text-blue-200 focus:outline-none"
           disabled={refreshing}
         >
-          {refreshing ? (
-            <span className="flex items-center">
-              <svg
-                className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              Refreshing...
-            </span>
-          ) : (
-            "Refresh"
-          )}
+          {refreshing ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
+      {/* Notifications list */}
       <div className="max-h-80 overflow-y-auto">
-        {notifications.length === 0 ? (
+        {loading && !refreshing ? (
+          <div className="p-4 text-center">
+            <p>Loading notifications...</p>
+          </div>
+        ) : error ? (
+          <div className="p-4 text-center">
+            <p className="text-red-500">{error}</p>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
             No notifications yet.
           </div>

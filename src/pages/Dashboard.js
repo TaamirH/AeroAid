@@ -460,6 +460,7 @@ const Dashboard = () => {
             </div>
           )}
 
+          {/* Main content tabs */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="border-b border-gray-200">
               <nav className="flex -mb-px">
@@ -937,180 +938,13 @@ const Dashboard = () => {
               )}
             </div>
           </div>
-
-          {/* Debug Tools Section (optional) */}
-          <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-sm mt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Debug Tools</h3>
-              <span className="text-xs text-gray-500 px-2 py-1 bg-gray-200 rounded">
-                Development Only
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Use these tools to test the application functionality. These will
-              be removed in production.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white p-4 rounded-lg border border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-3">
-                  Notifications
-                </h4>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await createTestNotification(
-                          currentUser.uid,
-                          nearbyEmergencies.length > 0
-                            ? nearbyEmergencies[0].id
-                            : "testEmergencyId"
-                        );
-                        toast.success(
-                          "Test notification created successfully!"
-                        );
-                      } catch (error) {
-                        console.error(
-                          "Error creating test notification:",
-                          error
-                        );
-                        toast.error("Failed to create test notification");
-                      }
-                    }}
-                    className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-                  >
-                    Create Test Notification
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      try {
-                        const allEmergencies = [
-                          ...emergencies,
-                          ...nearbyEmergencies,
-                        ];
-
-                        if (allEmergencies.length === 0) {
-                          return toast.error(
-                            "No emergencies found. Create one first."
-                          );
-                        }
-
-                        const result = await forceNotifyAllOperators(
-                          allEmergencies[0].id,
-                          currentUser.uid
-                        );
-                        if (result.success) {
-                          toast.success(
-                            `Notified ${
-                              result.notifiedOperators
-                            } operators about emergency ${allEmergencies[0].id.substring(
-                              0,
-                              8
-                            )}`
-                          );
-                        } else {
-                          toast.error(
-                            "Failed to send notifications: " + result.error
-                          );
-                        }
-                      } catch (error) {
-                        console.error("Error forcing notifications:", error);
-                        toast.error("Failed to force notifications");
-                      }
-                    }}
-                    className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  >
-                    Force Notify All Operators
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-lg border border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-3">
-                  Data & Debugging
-                </h4>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => {
-                      fetchNearbyEmergencies();
-                      toast.info("Refreshed nearby emergencies list");
-                    }}
-                    className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                  >
-                    Refresh Nearby Emergencies
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      console.log("Current user:", currentUser);
-                      console.log("User profile:", userProfile);
-                      console.log(
-                        "Current user location:",
-                        userProfile?.location
-                      );
-                      console.log("Nearby emergencies:", nearbyEmergencies);
-                      console.log("User emergencies:", emergencies);
-                      console.log("User assignments:", assignments);
-                      toast.info("Debug info logged to console");
-                    }}
-                    className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Log All Debug Info
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-sm font-medium text-yellow-800 mb-1">
-                Testing Instructions:
-              </p>
-              <ol className="list-decimal pl-5 space-y-1 text-sm text-yellow-700">
-                <li>
-                  Create a test emergency with "Create Test Emergency + Notify"
-                </li>
-                <li>
-                  Switch to another browser/incognito window with a different
-                  drone operator account
-                </li>
-                <li>Check if notifications appear in that account</li>
-                <li>
-                  If no notifications appear, use "Force Notify All Operators"
-                  in the original account
-                </li>
-              </ol>
-            </div>
-          </div>
         </div>
 
-        {/* Notifications panel - right column */}
+        {/* Right column - notifications - SIMPLIFIED */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow overflow-hidden sticky top-4">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-4">
-              <div className="flex justify-between items-center">
-                <h2 className="font-bold text-lg flex items-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                  </svg>
-                  Notifications
-                </h2>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="text-sm text-white opacity-80 hover:opacity-100"
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
-            {userProfile && currentUser && (
-              <NotificationsList userId={currentUser.uid} />
-            )}
+          <div className="sticky top-4">
+            {/* IMPORTANT: ONLY ADD THE NOTIFICATIONS COMPONENT HERE - NO WRAPPER DIVS */}
+            {currentUser && <NotificationsList userId={currentUser.uid} />}
           </div>
         </div>
       </div>

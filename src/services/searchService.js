@@ -125,17 +125,45 @@ export const acceptEmergency = async (
       firstResponseAt: emergencyData.firstResponseAt || serverTimestamp(), // Track when the first operator responded
     });
 
-    // Update the user's document with the emergencyId
+    // Get the current user data
     const userRef = doc(db, "users", operatorId);
-    await updateDoc(userRef, {
-      emergencyId: emergencyId,
-      currentAssignmentId: assignmentId,
-      lastEmergencyAccepted: serverTimestamp(),
-    });
+    const userSnap = await getDoc(userRef);
 
-    console.log(
-      `Updated user ${operatorId} with emergencyId ${emergencyId} and assignmentId ${assignmentId}`
-    );
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+
+      // Get existing participation history or initialize an empty array
+      const participatedEmergencies = userData.participatedEmergencies || [];
+
+      // Check if this emergency is already in the list (to avoid duplicates)
+      if (!participatedEmergencies.includes(emergencyId)) {
+        participatedEmergencies.push(emergencyId);
+      }
+
+      // Update the user's document with the emergencyId, assignmentId, and participation history
+      await updateDoc(userRef, {
+        emergencyId: emergencyId,
+        currentAssignmentId: assignmentId,
+        participatedEmergencies: participatedEmergencies, // Save participation history
+        lastEmergencyAccepted: serverTimestamp(),
+      });
+
+      console.log(
+        `Updated user ${operatorId} with emergencyId ${emergencyId}, assignmentId ${assignmentId}, and participation history`
+      );
+    } else {
+      // If the user document doesn't exist, just update with the basic fields
+      await updateDoc(userRef, {
+        emergencyId: emergencyId,
+        currentAssignmentId: assignmentId,
+        participatedEmergencies: [emergencyId],
+        lastEmergencyAccepted: serverTimestamp(),
+      });
+
+      console.log(
+        `Created participation history for user ${operatorId} with emergency ${emergencyId}`
+      );
+    }
 
     return assignmentId;
   } catch (error) {
@@ -270,6 +298,7 @@ export const completeSearchAssignment = async (assignmentId) => {
 
     const assignmentData = assignmentSnap.data();
     const operatorId = assignmentData.operatorId;
+    const emergencyId = assignmentData.emergencyId;
 
     if (!operatorId) {
       throw new Error("No operator associated with this assignment");
@@ -288,7 +317,7 @@ export const completeSearchAssignment = async (assignmentId) => {
     );
 
     // Get the related emergency
-    const emergencyRef = doc(db, "emergencies", assignmentData.emergencyId);
+    const emergencyRef = doc(db, "emergencies", emergencyId);
     const emergencySnap = await getDoc(emergencyRef);
 
     if (emergencySnap.exists()) {
@@ -298,7 +327,7 @@ export const completeSearchAssignment = async (assignmentId) => {
       const assignmentsRef = collection(db, "searchAssignments");
       const otherAssignmentsQuery = query(
         assignmentsRef,
-        where("emergencyId", "==", assignmentData.emergencyId),
+        where("emergencyId", "==", emergencyId),
         where("status", "==", "active"),
         where("__name__", "!=", assignmentId) // Exclude the current assignment
       );
@@ -315,7 +344,7 @@ export const completeSearchAssignment = async (assignmentId) => {
             updatedAt: serverTimestamp(),
           });
           console.log(
-            `Updated emergency ${assignmentData.emergencyId} status to 'completed' and cleared operatorId`
+            `Updated emergency ${emergencyId} status to 'completed' and cleared operatorId`
           );
         }
       } else {
@@ -325,30 +354,47 @@ export const completeSearchAssignment = async (assignmentId) => {
             operatorId: null,
             updatedAt: serverTimestamp(),
           });
-          console.log(
-            `Cleared operatorId from emergency ${assignmentData.emergencyId}`
-          );
+          console.log(`Cleared operatorId from emergency ${emergencyId}`);
         }
       }
     } else {
       console.warn(
-        `Emergency ${assignmentData.emergencyId} not found when completing assignment`
+        `Emergency ${emergencyId} not found when completing assignment`
       );
     }
 
-    // Clear the emergency ID from the user's document
+    // Update the user's document to track participation history
     const userRef = doc(db, "users", operatorId);
-    await updateDoc(userRef, {
-      emergencyId: deleteField(),
-      currentAssignmentId: deleteField(),
-      lastCompletedAssignmentId: assignmentId, // Optional: track last completed assignment
-      lastCompletedAt: serverTimestamp(), // Optional: track completion time
-    });
+    const userSnap = await getDoc(userRef);
 
-    console.log(
-      `Cleared emergencyId and currentAssignmentId from user ${operatorId}`
-    );
-    console.log("Assignment completed successfully");
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+
+      // Get existing participation history or initialize an empty array
+      const participatedEmergencies = userData.participatedEmergencies || [];
+
+      // Check if this emergency is already in the list (to avoid duplicates)
+      if (!participatedEmergencies.includes(emergencyId)) {
+        participatedEmergencies.push(emergencyId);
+      }
+
+      // Update the user document with participation history and clear current assignment
+      await updateDoc(userRef, {
+        emergencyId: deleteField(),
+        currentAssignmentId: deleteField(),
+        participatedEmergencies: participatedEmergencies, // Save participation history
+        lastCompletedAssignmentId: assignmentId,
+        lastCompletedAt: serverTimestamp(),
+      });
+
+      console.log(
+        `Updated user ${operatorId} participation history. Total: ${participatedEmergencies.length} emergencies`
+      );
+    } else {
+      console.warn(
+        `User ${operatorId} not found when updating participation history`
+      );
+    }
 
     return true;
   } catch (error) {
