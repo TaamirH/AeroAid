@@ -1,6 +1,6 @@
 // src/pages/Dashboard.js
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   getOperatorAssignments,
@@ -31,11 +31,16 @@ import {
 
 const Dashboard = () => {
   const { currentUser, userProfile } = useAuth();
+  const navigate = useNavigate();
   const [emergencies, setEmergencies] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [nearbyEmergencies, setNearbyEmergencies] = useState([]);
   const [activeTab, setActiveTab] = useState("emergencies");
   const [loading, setLoading] = useState(true);
+
+  const handleDownloadApp = () => {
+    navigate("/download-app");
+  };
 
   // Add this function to the Dashboard component
   const checkForNearbyEmergencies = async () => {
@@ -429,7 +434,7 @@ const Dashboard = () => {
                     />
                   </svg>
                 </div>
-                <div className="ml-4">
+                <div className="ml-4 flex-1">
                   <h2 className="text-lg font-semibold text-gray-900">
                     Drone Operator Status
                   </h2>
@@ -455,6 +460,29 @@ const Dashboard = () => {
                       </Link>
                     </div>
                   )}
+
+                  <div className="mt-4 flex">
+                    <button
+                      onClick={handleDownloadApp}
+                      className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 mr-2"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
+                      Download Drone App
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

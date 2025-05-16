@@ -76,7 +76,7 @@ const Register = () => {
         formData.location
       );
       toast.success('Account created successfully!');
-      navigate('/dashboard');
+      navigate('/email-verification');
     } catch (error) {
       console.error('Registration error:', error);
       toast.error('Failed to create account: ' + error.message);

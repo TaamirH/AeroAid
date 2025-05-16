@@ -20,6 +20,8 @@ import EmergencyDetails from './pages/EmergencyDetails';
 import Dashboard from './pages/Dashboard';
 import SearchAssignment from './pages/SearchAssignment';
 import VerificationHandler from './pages/VerificationHandler';
+import DroneAppDownload from './pages/DroneAppDownload';
+
 
 
 function App() {
@@ -61,6 +63,8 @@ function App() {
           <Route path="/emergency/:id" element={<PrivateRoute><EmergencyDetails /></PrivateRoute>} />
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/search/:id" element={<PrivateRoute><SearchAssignment /></PrivateRoute>} />
+          <Route path="/download-app" element={<PrivateRoute><DroneAppDownload /></PrivateRoute>} />
+
           
         </Routes>
       </div>
