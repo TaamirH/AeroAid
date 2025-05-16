@@ -13,20 +13,27 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  try {
+    setLoading(true);
+    const userCredential = await login(email, password);
     
-    try {
-      setLoading(true);
-      await login(email, password);
+    // Check if email is verified
+    if (!userCredential.user.emailVerified) {
+      toast.warning('Please verify your email before logging in.');
+      navigate('/email-verification');
+    } else {
       toast.success('Logged in successfully!');
       navigate('/dashboard');
-    } catch (error) {
-      console.error('Login error:', error);
-      toast.error('Failed to log in: ' + error.message);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Login error:', error);
+    toast.error('Failed to log in: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     // src/pages/Login.js (continued)

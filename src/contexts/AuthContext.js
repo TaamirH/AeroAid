@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
+  sendEmailVerification
 } from "firebase/auth";
 import {
   doc,
@@ -17,6 +18,8 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 import { notifyOperatorOfNearbyEmergencies } from "../services/notificationService";
+import { toast } from 'react-toastify';
+
 
 const AuthContext = createContext();
 
@@ -43,6 +46,11 @@ export function AuthProvider({ children }) {
         password
       );
       await updateProfile(userCredential.user, { displayName });
+            await sendEmailVerification(userCredential.user, {
+              url: window.location.origin + '/verify-email' // Redirect to your verification handler
+            });
+            toast.success(`Email verification sent to: ${email}`);
+            
 
       // Create user profile data
       const profileData = {
@@ -53,6 +61,7 @@ export function AuthProvider({ children }) {
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         notificationToken: null,
+        emailVerified: false,
       };
 
       // Create user profile in Firestore
@@ -80,6 +89,25 @@ export function AuthProvider({ children }) {
       throw error;
     }
   }
+
+    // Add a function to check email verification status
+  async function checkEmailVerification() {
+    if (currentUser) {
+      // Force refresh the token to get updated emailVerified status
+      await currentUser.reload();
+      return currentUser.emailVerified;
+    }
+    return false;
+  }
+
+ async function resendVerificationEmail() {
+  if (currentUser && !currentUser.emailVerified) {
+    return sendEmailVerification(currentUser, {
+      url: window.location.origin + '/verify-email' // Redirect to your verification handler
+    });
+  }
+  throw new Error("No user to verify or user already verified");
+}
 
   async function login(email, password) {
     try {
@@ -258,6 +286,8 @@ export function AuthProvider({ children }) {
     resetPassword,
     updateUserProfile,
     fetchUserProfile,
+    checkEmailVerification, 
+    resendVerificationEmail,
   };
 
   return (
