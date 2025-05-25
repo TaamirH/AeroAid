@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js
+// src/contexts/AuthContext.js - Fix continue URL
 import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   createUserWithEmailAndPassword,
@@ -20,7 +20,6 @@ import { auth, db } from "../services/firebase";
 import { notifyOperatorOfNearbyEmergencies } from "../services/notificationService";
 import { toast } from 'react-toastify';
 
-
 const AuthContext = createContext();
 
 export function useAuth() {
@@ -31,6 +30,12 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Get the correct continue URL based on current domain
+  const getContinueUrl = () => {
+    const currentDomain = window.location.origin;
+    return `${currentDomain}/verify-email`;
+  };
 
   async function signup(
     email,
@@ -46,11 +51,12 @@ export function AuthProvider({ children }) {
         password
       );
       await updateProfile(userCredential.user, { displayName });
-            await sendEmailVerification(userCredential.user, {
-              url: window.location.origin + '/verify-email' // Redirect to your verification handler
-            });
-            toast.success(`Email verification sent to: ${email}`);
-            
+      
+      // Send verification email with correct continue URL
+      await sendEmailVerification(userCredential.user, {
+        url: getContinueUrl()
+      });
+      toast.success(`Email verification sent to: ${email}`);
 
       // Create user profile data
       const profileData = {
@@ -90,7 +96,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-    // Add a function to check email verification status
+  // Add a function to check email verification status
   async function checkEmailVerification() {
     if (currentUser) {
       // Force refresh the token to get updated emailVerified status
@@ -100,14 +106,14 @@ export function AuthProvider({ children }) {
     return false;
   }
 
- async function resendVerificationEmail() {
-  if (currentUser && !currentUser.emailVerified) {
-    return sendEmailVerification(currentUser, {
-      url: window.location.origin + '/verify-email' // Redirect to your verification handler
-    });
+  async function resendVerificationEmail() {
+    if (currentUser && !currentUser.emailVerified) {
+      return sendEmailVerification(currentUser, {
+        url: getContinueUrl() // Use the same helper function
+      });
+    }
+    throw new Error("No user to verify or user already verified");
   }
-  throw new Error("No user to verify or user already verified");
-}
 
   async function login(email, password) {
     try {
