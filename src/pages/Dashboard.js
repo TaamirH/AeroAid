@@ -29,6 +29,7 @@ import {
   createTestEmergencyForNotifications,
 } from "../services/emergencyService";
 
+
 const Dashboard = () => {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();

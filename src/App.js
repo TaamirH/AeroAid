@@ -13,7 +13,7 @@ import { useAuth } from './contexts/AuthContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import EmailVerification from './pages/EmailVerification'; // Add this
+import EmailVerification from './pages/EmailVerification';
 import Profile from './pages/Profile';
 import EmergencyRequest from './pages/EmergencyRequest';
 import EmergencyDetails from './pages/EmergencyDetails';
@@ -22,12 +22,23 @@ import SearchAssignment from './pages/SearchAssignment';
 import VerificationHandler from './pages/VerificationHandler';
 import DroneAppDownload from './pages/DroneAppDownload';
 
-
+// Services
+import { initializeEmailJS } from './services/emailService';
 
 function App() {
   const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // Initialize EmailJS when the app starts
+  useEffect(() => {
+    try {
+      initializeEmailJS();
+      console.log('EmailJS initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize EmailJS:', error);
+    }
+  }, []);
   
   // Redirect to verification page if user is logged in but not verified
   useEffect(() => {
@@ -64,8 +75,6 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/search/:id" element={<PrivateRoute><SearchAssignment /></PrivateRoute>} />
           <Route path="/download-app" element={<PrivateRoute><DroneAppDownload /></PrivateRoute>} />
-
-          
         </Routes>
       </div>
       <ToastContainer position="bottom-right" />
