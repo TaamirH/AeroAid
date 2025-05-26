@@ -1,9 +1,11 @@
-// src/pages/Register.js
+// src/pages/Register.js - Clean version with proper error handling
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import { getCurrentLocation } from '../utils/geoUtils';
+import AddressAutocomplete from '../components/location/AddressAutocomplete';
+import AccountRecoveryHelper from '../components/auth/AccountRecoveryHelper';
 import Logo from '../components/layout/Logo';
 
 const Register = () => {
@@ -19,6 +21,9 @@ const Register = () => {
   const [locationStatus, setLocationStatus] = useState('idle');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showManualLocation, setShowManualLocation] = useState(false);
+  const [showAccountRecovery, setShowAccountRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
   const { signup } = useAuth();
   const navigate = useNavigate();
 
@@ -47,11 +52,39 @@ const Register = () => {
         location
       }));
       setLocationStatus('success');
+      setShowManualLocation(false);
       toast.success('Location retrieved successfully!');
     } catch (error) {
       console.error('Error getting location:', error);
       setLocationStatus('error');
-      toast.error('Failed to get location: ' + error.message);
+      setShowManualLocation(true);
+      toast.error('Failed to get location automatically. Please enter manually.');
+    }
+  };
+
+  const handleLocationSelect = (locationData) => {
+    setFormData(prev => ({
+      ...prev,
+      location: locationData.location
+    }));
+    setLocationStatus('success');
+    toast.success('Location set successfully!');
+  };
+
+  const handleAccountRecovery = (action) => {
+    setShowAccountRecovery(false);
+    setRecoveryEmail('');
+    
+    switch (action) {
+      case 'login':
+        navigate('/login');
+        break;
+      case 'proceed':
+        toast.info('You can proceed with registration.');
+        break;
+      case 'cancel':
+      default:
+        break;
     }
   };
 
@@ -68,6 +101,8 @@ const Register = () => {
     
     try {
       setLoading(true);
+      console.log('🚀 Starting registration process...');
+      
       await signup(
         formData.email, 
         formData.password, 
@@ -75,11 +110,24 @@ const Register = () => {
         formData.isDroneOperator,
         formData.location
       );
-      toast.success('Account created successfully!');
+      
+      console.log('✅ Registration completed successfully');
+      toast.success('Account created successfully! Please check your email for verification.');
       navigate('/email-verification');
+      
     } catch (error) {
-      console.error('Registration error:', error);
-      toast.error('Failed to create account: ' + error.message);
+      console.error('❌ Registration failed:', error);
+      
+      // Check for email already in use error
+      if (error.message.includes('email already exists') || 
+          error.message.includes('email-already-in-use') ||
+          error.message.includes('An account with this email already exists')) {
+        setRecoveryEmail(formData.email);
+        setShowAccountRecovery(true);
+      } else {
+        // For all other errors, show a clean error message
+        toast.error(error.message || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -241,57 +289,78 @@ const Register = () => {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <div className="ml-3 flex-1 md:flex md:justify-between">
-                    <p className="text-sm text-blue-700">
-                      Drone operators need to share their location.
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm text-blue-700 mb-3">
+                      Drone operators need to share their location to receive nearby emergency alerts.
                     </p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    onClick={handleGetLocation}
-                    className={`w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
-                      locationStatus === 'loading' 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : locationStatus === 'success'
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : locationStatus === 'error'
-                        ? 'bg-red-600 hover:bg-red-700'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
-                    disabled={locationStatus === 'loading'}
-                  >
-                    {locationStatus === 'loading' ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Getting Location...
-                      </>
-                    ) : locationStatus === 'success' ? (
-                      <>
-                        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        Location Obtained
-                      </>
-                    ) : locationStatus === 'error' ? (
-                      'Try Again'
-                    ) : (
-                      'Get My Location'
-                    )}
-                  </button>
-                  
-                  {formData.location && (
-                    <div className="mt-3 text-sm text-gray-600 bg-gray-100 p-2 rounded-md">
-                      <p>
-                        <span className="font-medium">Location:</span> Lat: {formData.location.latitude.toFixed(6)}, 
-                        Lng: {formData.location.longitude.toFixed(6)}
-                      </p>
+                    
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleGetLocation}
+                        className={`w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
+                          locationStatus === 'loading' 
+                            ? 'bg-gray-400 cursor-not-allowed' 
+                            : locationStatus === 'success'
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : locationStatus === 'error'
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+                        disabled={locationStatus === 'loading'}
+                      >
+                        {locationStatus === 'loading' ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Getting Location...
+                          </>
+                        ) : locationStatus === 'success' ? (
+                          <>
+                            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            Location Set Successfully
+                          </>
+                        ) : locationStatus === 'error' ? (
+                          '📍 Try Auto-Location Again'
+                        ) : (
+                          '📍 Get My Location Automatically'
+                        )}
+                      </button>
+                      
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowManualLocation(!showManualLocation)}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          {showManualLocation ? 'Hide Manual Entry' : 'Or Enter Location Manually'}
+                        </button>
+                      </div>
+                      
+                      {showManualLocation && (
+                        <div className="bg-white p-4 rounded-lg border border-blue-200">
+                          <h4 className="font-medium text-gray-700 mb-3">Enter Your Location</h4>
+                          <AddressAutocomplete 
+                            onLocationSelect={handleLocationSelect}
+                          />
+                        </div>
+                      )}
+                      
+                      {formData.location && (
+                        <div className="mt-3 text-sm text-gray-600 bg-gray-100 p-3 rounded-md">
+                          <p className="font-medium text-green-700 mb-1">✅ Location Set:</p>
+                          <p>
+                            Lat: {formData.location.latitude.toFixed(6)}, 
+                            Lng: {formData.location.longitude.toFixed(6)}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             )}
@@ -342,6 +411,13 @@ const Register = () => {
           </div>
         </div>
       </div>
+
+      {showAccountRecovery && (
+        <AccountRecoveryHelper 
+          email={recoveryEmail}
+          onRecoveryComplete={handleAccountRecovery}
+        />
+      )}
     </div>
   );
 };

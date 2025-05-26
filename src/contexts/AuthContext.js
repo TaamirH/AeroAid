@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js - Fix continue URL
+// src/contexts/AuthContext.js - Clean version with better error handling
 import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   createUserWithEmailAndPassword,
@@ -7,7 +7,8 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
-  sendEmailVerification
+  sendEmailVerification,
+  deleteUser
 } from "firebase/auth";
 import {
   doc,
@@ -15,6 +16,7 @@ import {
   getDoc,
   updateDoc,
   deleteField,
+  deleteDoc
 } from "firebase/firestore";
 import { auth, db } from "../services/firebase";
 import { notifyOperatorOfNearbyEmergencies } from "../services/notificationService";
@@ -37,6 +39,7 @@ export function AuthProvider({ children }) {
     return `${currentDomain}/verify-email`;
   };
 
+  // IMPROVED SIGNUP FUNCTION with better error handling
   async function signup(
     email,
     password,
@@ -44,21 +47,29 @@ export function AuthProvider({ children }) {
     isDroneOperator,
     location
   ) {
+    let userCredential = null;
+    let profileCreated = false;
+    
     try {
-      const userCredential = await createUserWithEmailAndPassword(
+      console.log('🚀 Starting registration process for:', email);
+      
+      // Step 1: Create user account in Firebase Auth
+      console.log('📝 Creating Firebase Auth user...');
+      userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
         password
       );
-      await updateProfile(userCredential.user, { displayName });
       
-      // Send verification email with correct continue URL
-      await sendEmailVerification(userCredential.user, {
-        url: getContinueUrl()
-      });
-      toast.success(`Email verification sent to: ${email}`);
-
-      // Create user profile data
+      console.log('✅ Firebase Auth user created:', userCredential.user.uid);
+      
+      // Step 2: Update the user's display name
+      console.log('👤 Updating user profile...');
+      await updateProfile(userCredential.user, { displayName });
+      console.log('✅ Display name updated');
+      
+      // Step 3: Create user profile document in Firestore
+      console.log('📄 Creating Firestore profile document...');
       const profileData = {
         displayName,
         email,
@@ -70,33 +81,99 @@ export function AuthProvider({ children }) {
         emailVerified: false,
       };
 
-      // Create user profile in Firestore
       await setDoc(doc(db, "users", userCredential.user.uid), profileData);
+      profileCreated = true;
+      console.log('✅ Firestore profile created');
+      
+      // Step 4: Send verification email
+      console.log('📧 Sending verification email...');
+      await sendEmailVerification(userCredential.user, {
+        url: getContinueUrl()
+      });
+      console.log('✅ Verification email sent');
+      toast.success(`Email verification sent to: ${email}`);
 
-      // Explicitly set the userProfile state to ensure it's updated
+      // Step 5: Set the userProfile state
       setUserProfile(profileData);
 
-      // Notify about nearby emergencies
+      // Step 6: Notify about nearby emergencies (async, non-blocking)
       if (isDroneOperator && location) {
-        // Do this asynchronously - don't await
+        console.log('🔔 Scheduling nearby emergency notifications...');
+        // Do this asynchronously - don't await, don't let it fail the registration
         notifyOperatorOfNearbyEmergencies(userCredential.user.uid, location)
           .then((result) => {
             console.log(
-              `Notified new operator of ${result.count} nearby emergencies`
+              `✅ Notified new operator of ${result.count} nearby emergencies`
             );
           })
           .catch((error) => {
-            console.error("Error notifying about nearby emergencies:", error);
+            console.error("⚠️ Error notifying about nearby emergencies (non-critical):", error);
+            // Don't fail the registration for this
           });
       }
 
+      console.log('🎉 Registration completed successfully!');
       return userCredential.user;
+      
     } catch (error) {
-      throw error;
+      console.error('❌ Registration failed at some step:', error);
+      
+      // CLEANUP: If anything failed, clean up what we created
+      if (userCredential && userCredential.user) {
+        console.log('🧹 Cleaning up failed registration...');
+        
+        try {
+          // Delete the Firestore profile if it was created
+          if (profileCreated) {
+            console.log('🗑️ Deleting Firestore profile...');
+            await deleteDoc(doc(db, "users", userCredential.user.uid));
+            console.log('✅ Firestore profile deleted');
+          }
+          
+          // Delete the Firebase Auth user
+          console.log('🗑️ Deleting Firebase Auth user...');
+          await deleteUser(userCredential.user);
+          console.log('✅ Firebase Auth user deleted');
+          
+        } catch (cleanupError) {
+          console.error('⚠️ Error during cleanup:', cleanupError);
+          // If cleanup fails, at least inform the user
+          toast.error('Registration failed and cleanup encountered issues. Please try again or contact support if the problem persists.');
+        }
+      }
+      
+      // Re-throw the original error with more context
+      const errorMessage = getRegistrationErrorMessage(error);
+      throw new Error(errorMessage);
     }
   }
 
-  // Add a function to check email verification status
+  // Helper function to provide user-friendly error messages
+  function getRegistrationErrorMessage(error) {
+    console.log('Error code:', error.code);
+    console.log('Error message:', error.message);
+    
+    switch (error.code) {
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists. Please use a different email or try logging in.';
+      case 'auth/weak-password':
+        return 'Password is too weak. Please use at least 6 characters.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/operation-not-allowed':
+        return 'Email/password accounts are not enabled. Please contact support.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your internet connection and try again.';
+      case 'permission-denied':
+        return 'Permission denied when creating user profile. Please try again.';
+      case 'unavailable':
+        return 'Service temporarily unavailable. Please try again in a moment.';
+      default:
+        // Return the original error message for unexpected errors
+        return error.message || 'Registration failed. Please try again.';
+    }
+  }
+
   async function checkEmailVerification() {
     if (currentUser) {
       // Force refresh the token to get updated emailVerified status
@@ -109,7 +186,7 @@ export function AuthProvider({ children }) {
   async function resendVerificationEmail() {
     if (currentUser && !currentUser.emailVerified) {
       return sendEmailVerification(currentUser, {
-        url: getContinueUrl() // Use the same helper function
+        url: getContinueUrl()
       });
     }
     throw new Error("No user to verify or user already verified");
@@ -117,36 +194,64 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     try {
+      console.log('🔐 Attempting login for:', email);
+      
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
         password
       );
 
+      console.log('✅ Login successful, loading profile...');
+      
       // After successful login, immediately load user profile
       const profile = await fetchUserProfile(userCredential.user.uid);
 
       // Explicitly set the userProfile state to ensure it's updated
       setUserProfile(profile);
 
-      // Check for nearby emergencies
+      // Check for nearby emergencies (non-blocking)
       if (profile.isDroneOperator && profile.location) {
-        // Do this asynchronously - don't await
         notifyOperatorOfNearbyEmergencies(
           userCredential.user.uid,
           profile.location
         )
           .then((result) => {
-            console.log(`Notified user of ${result.count} nearby emergencies`);
+            console.log(`🔔 Notified user of ${result.count} nearby emergencies`);
           })
           .catch((error) => {
-            console.error("Error notifying about nearby emergencies:", error);
+            console.error("⚠️ Error notifying about nearby emergencies:", error);
           });
       }
 
+      console.log('🎉 Login process completed');
       return userCredential;
     } catch (error) {
-      throw error;
+      console.error('❌ Login failed:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage;
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email address.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Please enter a valid email address.';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many failed attempts. Please try again later.';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
     }
   }
 
@@ -174,13 +279,13 @@ export function AuthProvider({ children }) {
 
   async function fetchUserProfile(userId) {
     try {
-      console.log("Fetching user profile for ID:", userId);
+      console.log("📖 Fetching user profile for ID:", userId);
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
         const userData = userSnap.data();
-        console.log("User profile data retrieved:", userData);
+        console.log("✅ User profile data retrieved:", userData);
 
         // If the user has an emergencyId but no assignment, we should verify
         if (userData.emergencyId && userData.currentAssignmentId) {
@@ -198,7 +303,7 @@ export function AuthProvider({ children }) {
               assignmentSnap.data().status !== "active"
             ) {
               // Assignment doesn't exist or is not active anymore, clear the fields
-              console.log("Clearing stale emergency assignment data");
+              console.log("🧹 Clearing stale emergency assignment data");
               await updateDoc(userRef, {
                 emergencyId: deleteField(),
                 currentAssignmentId: deleteField(),
@@ -209,7 +314,7 @@ export function AuthProvider({ children }) {
               userData.currentAssignmentId = null;
             }
           } catch (verifyError) {
-            console.error("Error verifying assignment:", verifyError);
+            console.error("⚠️ Error verifying assignment:", verifyError);
             // Don't block the profile fetch if this check fails
           }
         }
@@ -217,7 +322,7 @@ export function AuthProvider({ children }) {
         setUserProfile(userData);
         return userData;
       } else {
-        console.log("No user profile found, creating a default one");
+        console.log("📝 No user profile found, creating a default one");
         // Create a default profile if none exists
         const defaultProfile = {
           displayName: currentUser?.displayName || "",
@@ -238,14 +343,14 @@ export function AuthProvider({ children }) {
         return defaultProfile;
       }
     } catch (error) {
-      console.error("Error fetching user profile:", error);
+      console.error("❌ Error fetching user profile:", error);
       // Set a default profile even on error to prevent endless loading
       const fallbackProfile = {
         displayName: currentUser?.displayName || "",
         email: currentUser?.email || "",
         isDroneOperator: false,
         location: null,
-        createdAt: new Date().toISOString(),
+        createdAtCreatedAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         emergencyId: null,
         currentAssignmentId: null,
@@ -258,19 +363,19 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log("Auth state changed, user:", user?.uid);
+      console.log("🔄 Auth state changed, user:", user?.uid);
       setCurrentUser(user);
 
       if (user) {
         try {
           // Force synchronous loading of user profile
           const profile = await fetchUserProfile(user.uid);
-          console.log("User profile loaded:", profile);
+          console.log("✅ User profile loaded:", profile);
 
           // Explicitly set the userProfile state to ensure it's updated
           setUserProfile(profile);
         } catch (error) {
-          console.error("Error loading user profile:", error);
+          console.error("❌ Error loading user profile:", error);
           setUserProfile(null);
         }
       } else {
