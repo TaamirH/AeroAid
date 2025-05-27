@@ -1,11 +1,11 @@
-// src/pages/Home.js
+// src/pages/Home.js - Improved version with better authenticated user experience
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '../components/layout/Logo';
 
 const Home = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
 
   return (
     <div className="min-h-screen">
@@ -33,31 +33,56 @@ const Home = () => {
           
           <div className="mt-10">
             {currentUser ? (
-              <div className="space-x-4">
-                <Link
-                  to="/dashboard"
-                  className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
-                >
-                  Go to Dashboard
-                </Link>
-                <Link
-                  to="/emergency"
-                  className="inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
-                >
-                  Report Emergency
-                </Link>
+              // Authenticated user buttons
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                  <Link
+                    to="/emergency"
+                    className="inline-flex items-center bg-red-600 bg-opacity-70 hover:bg-opacity-90 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 shadow-lg"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    Report Emergency
+                  </Link>
+                  
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex items-center bg-blue-600 bg-opacity-70 hover:bg-opacity-90 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 shadow-lg"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                    </svg>
+                    My Dashboard
+                  </Link>
+                </div>
+                
+
+                
+                <div className="mt-6 text-blue-100">
+                  <p className="text-lg">
+                    Welcome back, <span className="font-semibold">{userProfile?.displayName || currentUser.displayName || 'there'}!</span>
+                  </p>
+                  <p className="text-sm mt-1">
+                    {userProfile?.isDroneOperator 
+                      ? "Ready to help in emergency situations" 
+                      : "Need help? Report an emergency to get assistance from nearby drone operators"
+                    }
+                  </p>
+                </div>
               </div>
             ) : (
+              // Non-authenticated user buttons
               <div className="space-x-4">
                 <Link
                   to="/login"
-                  className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
+                  className="inline-block bg-blue-600 bg-opacity-70 hover:bg-opacity-90 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 shadow-lg"
                 >
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
+                  className="inline-block bg-green-600 bg-opacity-70 hover:bg-opacity-90 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 shadow-lg"
                 >
                   Register
                 </Link>
@@ -157,6 +182,49 @@ const Home = () => {
         </div>
       </div>
       
+      {/* Quick Stats Section - Only show if user is authenticated */}
+      {currentUser && (
+        <div className="py-16 bg-gray-50">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl font-extrabold text-center text-gray-900 mb-12">
+              Your AeroAid Activity
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+                <div className="text-3xl font-bold text-blue-600 mb-2">
+                  {userProfile?.isDroneOperator ? 'Active' : 'Ready'}
+                </div>
+                <p className="text-gray-600">
+                  {userProfile?.isDroneOperator ? 'Drone Operator Status' : 'to Report Emergency'}
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+                <div className="text-3xl font-bold text-green-600 mb-2">
+                  {userProfile?.participatedEmergencies?.length || 0}
+                </div>
+                <p className="text-gray-600">
+                  {userProfile?.isDroneOperator ? 'Emergencies Helped' : 'Emergency Requests'}
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+                <div className="text-3xl font-bold text-purple-600 mb-2">
+                  {userProfile?.location ? 'All Set' : 'Not Set'}
+                </div>
+                <p className="text-gray-600">Location Status</p>
+                {!userProfile?.location && (
+                  <Link to="/profile" className="text-sm text-blue-600 hover:text-blue-800 mt-2 inline-block">
+                    Update Location →
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Testimonials Section */}
       <div className="py-16 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -202,29 +270,61 @@ const Home = () => {
         </div>
       </div>
       
-      {/* CTA Section */}
+      {/* CTA Section - Different content based on auth status */}
       <div className="py-16 bg-blue-600">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-4">
-            Ready to join the AeroAid network?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8">
-            Sign up today to be part of a community saving lives with drone technology.
-          </p>
-          <div className="inline-flex space-x-4">
-            <Link
-              to="/register"
-              className="bg-white text-blue-600 hover:bg-blue-50 font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
-            >
-              Register Now
-            </Link>
-            <Link
-              to="/login"
-              className="bg-transparent text-white hover:bg-blue-700 font-bold py-3 px-8 rounded-lg border border-white transition-colors"
-            >
-              Login
-            </Link>
-          </div>
+          {currentUser ? (
+            // Authenticated user CTA
+            <>
+              <h2 className="text-3xl font-extrabold text-white mb-4">
+                Ready to make a difference?
+              </h2>
+              <p className="text-xl text-blue-100 mb-8">
+                {userProfile?.isDroneOperator 
+                  ? "Your drone can help save lives. Stay alert for nearby emergencies and be ready to respond when needed."
+                  : "In an emergency? Don't wait. Get help from nearby drone operators immediately."
+                }
+              </p>
+              <div className="inline-flex space-x-4">
+                <Link
+                  to="/emergency"
+                  className="bg-white text-blue-600 hover:bg-blue-50 font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
+                >
+                  Report Emergency
+                </Link>
+                <Link
+                  to="/dashboard"
+                  className="bg-transparent text-white hover:bg-blue-700 font-bold py-3 px-8 rounded-lg border border-white transition-colors"
+                >
+                  View Dashboard
+                </Link>
+              </div>
+            </>
+          ) : (
+            // Non-authenticated user CTA
+            <>
+              <h2 className="text-3xl font-extrabold text-white mb-4">
+                Ready to join the AeroAid network?
+              </h2>
+              <p className="text-xl text-blue-100 mb-8">
+                Sign up today to be part of a community saving lives with drone technology.
+              </p>
+              <div className="inline-flex space-x-4">
+                <Link
+                  to="/register"
+                  className="bg-white text-blue-600 hover:bg-blue-50 font-bold py-3 px-8 rounded-lg transition-colors shadow-lg"
+                >
+                  Register Now
+                </Link>
+                <Link
+                  to="/login"
+                  className="bg-transparent text-white hover:bg-blue-700 font-bold py-3 px-8 rounded-lg border border-white transition-colors"
+                >
+                  Login
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
       
