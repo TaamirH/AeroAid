@@ -65,7 +65,7 @@ const Home = () => {
                   </p>
                   <p className="text-sm mt-1">
                     {userProfile?.isDroneOperator 
-                      ? "Ready to help in emergency situations" 
+                      ? "Ready to help in emergency situations?" 
                       : "Need help? Report an emergency to get assistance from nearby drone operators"
                     }
                   </p>
