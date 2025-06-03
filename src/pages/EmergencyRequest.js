@@ -26,6 +26,10 @@ const emergencyTypes = [
   'Structural Damage',
   'Fire',
   'Medical Emergency',
+  'Suspected Kidnapping',
+  'Terror Infiltration',
+  'Person Drowning in Sea',
+  'Stolen Vehicles and Property',
   'Other'
 ];
 const emergencyStatuses = {
